@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.animated-gradient-bg {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: -10;
+  background: linear-gradient(120deg, #caa6f1 0%, #98a3ee 30%, #8cbaea 55%, #93e8ef 80%, #8fefd2 100%);
+  background-size: 200% 200%;
+  animation: gradientMove 12s ease-in-out infinite alternate;
+  transition: background 0.5s;
+}
+
+@keyframes gradientMove {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 100% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-gray-200;
+  }
+  
+  body {
+    @apply min-h-screen font-sans;
+  }
+}
+
+@layer components {
+  .form-input {
+    @apply w-full px-4 pt-6 pb-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-200 focus:border-transparent transition-all duration-200 bg-white text-gray-900 placeholder-transparent;
+  }
+  
+  .form-input:focus {
+    @apply outline-none shadow-lg;
+  }
+  
+  .btn-primary {
+    @apply w-full bg-indigo-300 hover:bg-indigo-400 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200 transform hover:scale-[1.03] focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:ring-offset-2 shadow-lg;
+  }
+  
+  .btn-secondary {
+    @apply w-full bg-white hover:bg-gray-50 text-gray-700 font-medium py-3 px-6 rounded-lg border border-gray-300 transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2;
+  }
+  
+  .card {
+    @apply bg-white/70 backdrop-blur-xl rounded-2xl shadow-2xl p-8 w-full max-w-md mx-auto border-2 border-transparent relative overflow-hidden;
+  }
+  
+  .input-group {
+    @apply space-y-2;
+  }
+  
+  .input-label {
+    @apply block text-sm font-medium text-gray-700 mb-1;
+  }
+  
+  .error-message {
+    @apply text-red-500 text-sm mt-1;
+  }
+  
+  .success-message {
+    @apply text-green-500 text-sm mt-1;
+  }
+  
+  .floating-label {
+    @apply absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none transition-all duration-200 origin-left bg-white px-1;
+  }
+  
+  .form-input:focus + .floating-label,
+  .form-input:not(:placeholder-shown) + .floating-label {
+    @apply top-2 left-3 text-xs text-indigo-400 bg-white px-1 -translate-y-0 scale-90;
+  }
+}
+
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.7s cubic-bezier(0.4,0,0.2,1);
+  }
+  
+  .animate-float {
+    animation: floatY 3s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes floatY {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-18px);
+  }
+} 
