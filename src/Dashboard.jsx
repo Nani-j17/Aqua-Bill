@@ -98,6 +98,86 @@ export default function Dashboard() {
     }
   };
 
+  const fetchUsage = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('flow_data')
+        .select('flow_rate, liters, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      const cleanedData = data.map(item => ({
+        ...item,
+        created_at: item.created_at || item.timestamp
+      }));
+
+      setUsageData(cleanedData);
+
+      const currentMonthData = cleanedData.filter(item => {
+        const itemDate = new Date(item.created_at);
+        return itemDate >= thisMonth && itemDate <= today;
+      });
+
+      const totalUsage = currentMonthData.reduce((sum, item) => sum + (item.liters || 0), 0);
+      const totalAmount = totalUsage * 10;
+
+      setCurrentMonthUsage(totalUsage);
+      setCurrentMonthAmount(totalAmount);
+
+      const maxCapacity = 1000;
+      const currentLevel = Math.min((totalUsage / maxCapacity) * 100, 100);
+      setWaterLevelPercentage(currentLevel);
+
+      setLoading(false);
+    } catch (error) {
+      setLoading(false);
+    }
+  };
+
+  const createSampleData = async () => {
+    if (!user) return;
+    
+    try {
+      const sampleData = [];
+      const now = new Date();
+      
+      // Create sample data for the last 7 days
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(now);
+        date.setDate(date.getDate() - i);
+        
+        // Create multiple entries per day
+        for (let hour = 0; hour < 24; hour += 2) {
+          const timestamp = new Date(date);
+          timestamp.setHours(hour, Math.floor(Math.random() * 60), Math.floor(Math.random() * 60));
+          
+          sampleData.push({
+            user_id: user.id,
+            flow_rate: Math.random() * 10 + 5, // Random flow rate between 5-15
+            liters: Math.random() * 50 + 20, // Random usage between 20-70 liters
+            created_at: timestamp.toISOString()
+          });
+        }
+      }
+      
+      const { error } = await supabase
+        .from('flow_data')
+        .insert(sampleData);
+      
+      if (!error) {
+        // Refresh the data
+        await fetchUsage();
+      } else {
+        console.error('Error creating sample data:', error);
+      }
+    } catch (error) {
+      console.error('Error creating sample data:', error);
+    }
+  };
+
   const getResponseDetails = async (notificationId) => {
     try {
       const { data, error } = await supabase
@@ -136,45 +216,6 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    async function fetchUsage() {
-      if (!user) return;
-      try {
-        const { data, error } = await supabase
-      .from('flow_data')
-          .select('flow_rate, liters, created_at')
-        .eq('user_id', user.id)
-      .order('created_at', { ascending: true });
-
-        if (error) throw error;
-
-        const cleanedData = data.map(item => ({
-          ...item,
-          created_at: item.created_at || item.timestamp
-        }));
-
-        setUsageData(cleanedData);
-
-        const currentMonthData = cleanedData.filter(item => {
-          const itemDate = new Date(item.created_at);
-          return itemDate >= thisMonth && itemDate <= today;
-        });
-
-        const totalUsage = currentMonthData.reduce((sum, item) => sum + (item.liters || 0), 0);
-        const totalAmount = totalUsage * 10;
-
-        setCurrentMonthUsage(totalUsage);
-        setCurrentMonthAmount(totalAmount);
-
-        const maxCapacity = 1000;
-        const currentLevel = Math.min((totalUsage / maxCapacity) * 100, 100);
-        setWaterLevelPercentage(currentLevel);
-
-        setLoading(false);
-      } catch (error) {
-        setLoading(false);
-      }
-    }
-
     if (user) {
     fetchUsage();
       const interval = setInterval(fetchUsage, 1000);
@@ -516,10 +557,18 @@ export default function Dashboard() {
               </div>
               <div className="text-3xl font-bold text-white mb-2">
                 {currentDateUsage.toFixed(1)} L
-          </div>
+              </div>
               <p className="text-blue-100 text-sm">
                 {mostRecentDate ? formatDateDMY(mostRecentDate) : 'No data'}
               </p>
+              {!mostRecentDate && (
+                <button
+                  onClick={createSampleData}
+                  className="mt-2 px-3 py-1 bg-blue-500/20 text-blue-300 text-xs rounded-lg hover:bg-blue-500/30 transition-all"
+                >
+                  Generate Sample Data
+                </button>
+              )}
             </motion.div>
 
             <motion.div
@@ -610,9 +659,15 @@ export default function Dashboard() {
                 {chartData.labels && chartData.labels.length > 0 ? (
                   <Line data={chartData} options={chartOptions} />
                 ) : (
-                  <div className="h-full flex items-center justify-center text-white/60">
-                    No data available for selected period
-            </div>
+                  <div className="h-full flex flex-col items-center justify-center text-white/60">
+                    <p className="mb-4">No data available for selected period</p>
+                    <button
+                      onClick={createSampleData}
+                      className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all"
+                    >
+                      Generate Sample Data
+                    </button>
+                  </div>
                 )}
             </div>
           </motion.div>
