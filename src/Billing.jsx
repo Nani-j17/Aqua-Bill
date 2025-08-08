@@ -94,13 +94,13 @@ export default function Billing() {
 
   useEffect(() => {
     async function fetchUsageData() {
-      if (!user) return;
+        if (!user) return;
       try {
         const { data, error } = await supabase
-          .from('flow_data')
+      .from('flow_data')
           .select('flow_rate, liters, created_at')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: true });
+            .eq('user_id', user.id)
+      .order('created_at', { ascending: true });
 
         if (error) throw error;
 
@@ -133,20 +133,20 @@ export default function Billing() {
     }
 
     if (user) {
-      fetchUsageData();
+    fetchUsageData();
       const interval = setInterval(fetchUsageData, 1000);
       return () => clearInterval(interval);
     }
-  }, [user]);
+}, [user]);
 
   useEffect(() => {
-    async function fetchAllBills() {
-      if (!user) return;
+      async function fetchAllBills() {
+          if (!user) return;
       try {
-        const { data, error } = await supabase
-          .from('bills')
-          .select('*')
-          .eq('user_id', user.id)
+          const { data, error } = await supabase
+              .from('bills')
+              .select('*')
+              .eq('user_id', user.id)
           .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -177,7 +177,7 @@ export default function Billing() {
     let filtered = allBills;
 
     if (dateRangeFilter !== 'all') {
-      const now = new Date();
+        const now = new Date();
       const filterDate = new Date();
       
       switch (dateRangeFilter) {
@@ -212,7 +212,7 @@ export default function Billing() {
     }
 
     if (searchQuery.trim()) {
-      const lowercasedQuery = searchQuery.toLowerCase();
+        const lowercasedQuery = searchQuery.toLowerCase();
       filtered = filtered.filter(bill =>
         bill.id.toString().includes(lowercasedQuery) ||
         bill.amount.toString().includes(lowercasedQuery) ||
@@ -222,7 +222,7 @@ export default function Billing() {
     }
 
     return filtered;
-  }, [allBills, dateRangeFilter, statusFilter, searchQuery]);
+}, [allBills, dateRangeFilter, statusFilter, searchQuery]);
 
   const paginatedBills = useMemo(() => {
     const startIndex = (currentPage - 1) * billsPerPage;
@@ -231,17 +231,17 @@ export default function Billing() {
 
   const totalPages = Math.ceil(filteredBills.length / billsPerPage);
 
-  const paginate = (pageNumber) => {
+const paginate = (pageNumber) => {
     setCurrentPage(pageNumber);
-  };
+};
 
-  const handleExport = () => {
+const handleExport = () => {
     const csvContent = [
       ['Bill ID', 'Date', 'Amount', 'Status', 'Due Date'],
       ...paginatedBills.map(bill => [
         bill.id,
         bill.date,
-        bill.amount,
+            bill.amount,
         bill.status,
         bill.dueDate
       ])
@@ -484,10 +484,10 @@ export default function Billing() {
                 <div className="w-12 h-12 bg-yellow-500/20 rounded-lg flex items-center justify-center">
                   <RiBankLine className="text-2xl text-yellow-300" />
                 </div>
-              </div>
+                    </div>
               <div className="text-3xl font-bold text-white mb-2">
                 ₹{prevMonthBillAmount.toFixed(2)}
-              </div>
+                    </div>
               <p className="text-blue-100 text-sm">Total amount due</p>
             </motion.div>
 
@@ -559,8 +559,8 @@ export default function Billing() {
                       <div>
                         <h4 className="font-semibold text-white">{method.name}</h4>
                         <p className="text-blue-100 text-sm">{method.description || method.cardNumber}</p>
-                      </div>
-                    </div>
+                  </div>
+                </div>
                     {method.isDefault && (
                       <span className="bg-green-500 text-white px-2 py-1 rounded-full text-xs">Active</span>
                     )}
@@ -582,7 +582,7 @@ export default function Billing() {
               <h3 className="text-xl font-semibold text-white">Bill History</h3>
               <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-2">
-                  <RiSearchLine className="text-gray-400" />
+                    <RiSearchLine className="text-gray-400" />
                   <input
                     type="text"
                     placeholder="Search bills..."
@@ -647,8 +647,8 @@ export default function Billing() {
                             ? 'bg-red-500/20 text-red-300'
                             : 'bg-yellow-500/20 text-yellow-300'
                         }`}>
-                          {bill.status}
-                        </span>
+                                        {bill.status}
+                                    </span>
                       </td>
                       <td className="py-3 text-white">{bill.dueDate}</td>
                       <td className="py-3">
@@ -670,7 +670,7 @@ export default function Billing() {
                   className="px-3 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Previous
-                </button>
+                    </button>
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                   <button
                     key={page}
@@ -682,17 +682,17 @@ export default function Billing() {
                     }`}
                   >
                     {page}
-                  </button>
-                ))}
+                        </button>
+                    ))}
                 <button
                   onClick={() => paginate(currentPage + 1)}
                   disabled={currentPage === totalPages}
                   className="px-3 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Next
-                </button>
+                        Next
+                    </button>
               </div>
-            )}
+              )}
           </motion.div>
 
       {showPaymentPopup && (
@@ -723,7 +723,7 @@ export default function Billing() {
                   <div className="flex items-center justify-center space-x-2">
                     <RiLoader4Line className="animate-spin" />
                     <span>Processing...</span>
-                  </div>
+      </div>
                 ) : (
                   'Pay Now'
                 )}
@@ -766,8 +766,8 @@ export default function Billing() {
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
                   maxLength="19"
                 />
-              </div>
-              <div>
+                  </div>
+                  <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Card Holder Name</label>
                 <input
                   type="text"
@@ -798,8 +798,8 @@ export default function Billing() {
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
                     maxLength="5"
                   />
-                </div>
-                <div>
+                  </div>
+                  <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">CVV</label>
                   <input
                     type="text"
@@ -819,7 +819,7 @@ export default function Billing() {
               >
                 Cancel
               </button>
-              <button
+              <button 
                 onClick={handleSaveNewPaymentMethod}
                 className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all"
               >
@@ -902,7 +902,7 @@ export default function Billing() {
             >
               Got it!
             </button>
-          </motion.div>
+        </motion.div>
         </div>
       )}
     </div>

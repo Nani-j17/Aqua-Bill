@@ -140,10 +140,10 @@ export default function Dashboard() {
       if (!user) return;
       try {
         const { data, error } = await supabase
-          .from('flow_data')
+      .from('flow_data')
           .select('flow_rate, liters, created_at')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: true });
+        .eq('user_id', user.id)
+      .order('created_at', { ascending: true });
 
         if (error) throw error;
 
@@ -176,7 +176,7 @@ export default function Dashboard() {
     }
 
     if (user) {
-      fetchUsage();
+    fetchUsage();
       const interval = setInterval(fetchUsage, 1000);
       const notificationInterval = setInterval(() => {
         if (user) fetchNotifications(user.id);
@@ -210,7 +210,7 @@ export default function Dashboard() {
 
     switch (selectedPeriod) {
       case 'daily':
-        const today = new Date();
+      const today = new Date();
         const yesterday = subDays(today, 1);
         
         const todayData = usageData.filter(item => {
@@ -372,13 +372,13 @@ export default function Dashboard() {
 
         chartDataForPeriod = {
           labels: monthDays.map(day => day.toString()),
-          datasets: [
-            {
+    datasets: [
+      {
               label: 'Previous Month',
               data: previousMonthUsageByDay,
               borderColor: '#ef4444',
               backgroundColor: 'rgba(239, 68, 68, 0.1)',
-              borderWidth: 2,
+        borderWidth: 2,
               fill: false,
               tension: 0.4
             },
@@ -387,7 +387,7 @@ export default function Dashboard() {
               data: currentMonthUsageByDay,
               borderColor: '#3b82f6',
               backgroundColor: 'rgba(59, 130, 246, 0.1)',
-              borderWidth: 2,
+        borderWidth: 2,
               fill: false,
               tension: 0.4
             }
@@ -482,7 +482,7 @@ export default function Dashboard() {
                     </span>
                   )}
                 </button>
-              </div>
+                  </div>
               <Link to="/billing" className="flex items-center space-x-2 bg-white/20 backdrop-blur-sm text-white px-4 py-2 rounded-lg hover:bg-white/30 transition-all">
                 <RiBillLine className="text-xl" />
                 <span>Billing</span>
@@ -502,9 +502,9 @@ export default function Dashboard() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <motion.div
+        <motion.div
               initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
+          animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
               className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20"
             >
@@ -516,7 +516,7 @@ export default function Dashboard() {
               </div>
               <div className="text-3xl font-bold text-white mb-2">
                 {currentDateUsage.toFixed(1)} L
-              </div>
+          </div>
               <p className="text-blue-100 text-sm">
                 {mostRecentDate ? formatDateDMY(mostRecentDate) : 'No data'}
               </p>
@@ -582,7 +582,7 @@ export default function Dashboard() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            <motion.div
+          <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.5 }}
@@ -612,10 +612,10 @@ export default function Dashboard() {
                 ) : (
                   <div className="h-full flex items-center justify-center text-white/60">
                     No data available for selected period
-                  </div>
+            </div>
                 )}
-              </div>
-            </motion.div>
+            </div>
+          </motion.div>
 
             <motion.div
               initial={{ opacity: 0, x: 20 }}
@@ -659,7 +659,7 @@ export default function Dashboard() {
                   <div>
                     <h4 className="font-semibold text-white">Profile</h4>
                     <p className="text-blue-100 text-sm">Manage your account</p>
-                  </div>
+                </div>
                 </Link>
               </div>
             </motion.div>
@@ -669,7 +669,7 @@ export default function Dashboard() {
 
       {showNotificationModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <motion.div
+            <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
@@ -709,7 +709,7 @@ export default function Dashboard() {
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <div>
+                    <div>
                         <h4 className="font-semibold text-gray-800">{notification.title}</h4>
                         <p className="text-gray-600 text-sm">{notification.message}</p>
                         <p className="text-gray-400 text-xs mt-1">
@@ -720,11 +720,11 @@ export default function Dashboard() {
                         <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
                       )}
                     </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </motion.div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
         </div>
       )}
 
@@ -764,8 +764,8 @@ export default function Dashboard() {
               >
                 Close
               </button>
-            </div>
-          </motion.div>
+          </div>
+        </motion.div>
         </div>
       )}
     </div>

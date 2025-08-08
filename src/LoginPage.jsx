@@ -33,22 +33,22 @@ function FormInput({ type, placeholder, value, onChange, icon: Icon, error, disa
             <Icon className="text-xl" />
           </div>
         )}
-        <input
+      <input
           type={type === 'password' ? (showPassword ? 'text' : 'password') : type}
           placeholder={placeholder}
-          value={value}
-          onChange={onChange}
+        value={value}
+        onChange={onChange}
           disabled={disabled}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
           className={`w-full px-4 py-4 bg-transparent text-white placeholder-white/60 focus:outline-none transition-all duration-300 ${
             Icon ? 'pl-12' : 'pl-4'
           } ${type === 'password' ? 'pr-12' : 'pr-4'}`}
           {...props}
-        />
-        {type === 'password' && (
-          <button
-            type="button"
+      />
+      {type === 'password' && (
+        <button
+          type="button"
             onClick={() => setShowPassword(!showPassword)}
             className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white/60 hover:text-white transition-colors"
           >
@@ -152,7 +152,7 @@ export default function LoginPage() {
         if (isAdmin) {
           navigate('/admin');
         } else {
-          navigate('/dashboard');
+            navigate('/dashboard');
         }
       } else {
         if (formData.password !== formData.confirmPassword) {
@@ -235,7 +235,7 @@ export default function LoginPage() {
           transition={{ duration: 0.5 }}
           className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20 shadow-2xl"
         >
-          <div className="text-center mb-8">
+            <div className="text-center mb-8">
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
@@ -246,11 +246,11 @@ export default function LoginPage() {
             </motion.div>
             <h1 className="text-3xl font-bold text-white mb-2">
               {mode === 'login' ? 'Welcome Back' : 'Create Account'}
-            </h1>
+              </h1>
             <p className="text-blue-100">
               {mode === 'login' ? 'Sign in to your account' : 'Join AquaBill today'}
-            </p>
-          </div>
+              </p>
+            </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {mode === 'signup' && (
@@ -269,23 +269,23 @@ export default function LoginPage() {
                   onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                   required
                 />
-              </div>
-            )}
+                  </div>
+                )}
 
-            <FormInput
+                  <FormInput
               type="email"
               placeholder="Email Address"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              required
-            />
+                    required
+                  />
 
-            <FormInput
+                  <FormInput
               type="password"
               placeholder="Password"
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              required
+                    required
             />
 
             {mode === 'signup' && (
@@ -298,17 +298,17 @@ export default function LoginPage() {
               />
             )}
 
-            {mode === 'login' && (
+              {mode === 'login' && (
               <div className="flex justify-end">
-                <button
-                  type="button"
+                  <button
+                    type="button"
                   onClick={handleForgotPassword}
                   className="text-blue-200 hover:text-white text-sm transition-colors"
-                >
+                  >
                   Forgot Password?
-                </button>
-              </div>
-            )}
+                  </button>
+                </div>
+              )}
 
             <button
               type="submit"
@@ -382,18 +382,18 @@ export default function LoginPage() {
               You are logged in as an administrator. Would you like to continue to the admin dashboard?
             </p>
             <div className="flex space-x-3">
-              <button
+                    <button
                 onClick={handleAdminLogout}
                 className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all"
-              >
+                    >
                 Logout & Sign in as Different User
-              </button>
-              <button
+                    </button>
+                    <button
                 onClick={handleAdminContinue}
                 className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all"
-              >
+                    >
                 Continue to Admin Dashboard
-              </button>
+                    </button>
             </div>
           </motion.div>
         </div>

@@ -97,7 +97,7 @@ export default function Profile() {
         throw error;
       } else {
         if (!dbProfile.join_date || !dbProfile.account_number) {
-          const updates = {};
+        const updates = {};
           if (!dbProfile.join_date) updates.join_date = dayjs().format('YYYY-MM-DD');
           if (!dbProfile.account_number) updates.account_number = generateAccountNumber();
           
@@ -174,7 +174,7 @@ export default function Profile() {
       setOtpError('Please enter a valid 10-digit mobile number');
       return;
     }
-
+    
     setShowOtpModal(true);
     setOtpInput('');
     setOtpError('');
@@ -188,13 +188,13 @@ export default function Profile() {
     
     if (otpInput === '123456') {
       setShowOtpModal(false);
-      setOtpError('');
-      setMobileModified(false);
+    setOtpError('');
+        setMobileModified(false);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
-    } else {
-      setOtpError('Invalid OTP. Please try again.');
-    }
+      } else {
+        setOtpError('Invalid OTP. Please try again.');
+      }
   };
 
   const handlePhotoUpload = async (event) => {
@@ -222,7 +222,7 @@ export default function Profile() {
     setSaveError('');
 
     try {
-      let photoUrl = profilePhotoUrl;
+    let photoUrl = profilePhotoUrl;
 
       if (picPreview && picPreview !== profilePhotoUrl && picPreview.startsWith('blob:')) {
         const file = await fetch(picPreview).then(r => r.blob());
@@ -245,8 +245,8 @@ export default function Profile() {
       const updatedProfile = {
         first_name: profile.first_name,
         last_name: profile.last_name,
-        mobile: profile.mobile,
-        dob: profile.dob,
+      mobile: profile.mobile,
+      dob: profile.dob,
         address: profile.address,
         city: profile.city,
         state: profile.state,
@@ -262,12 +262,12 @@ export default function Profile() {
 
       if (error) throw error;
 
-      setSaveSuccess(true);
+        setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (error) {
       setSaveError('Failed to save profile. Please try again.');
     } finally {
-      setSaving(false);
+    setSaving(false);
     }
   };
 
@@ -332,8 +332,8 @@ export default function Profile() {
                       className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
                       required
                     />
-                  </div>
-                </div>
+          </div>
+              </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -341,7 +341,7 @@ export default function Profile() {
                     <input
                       type="email"
                       value={profile.email || user?.email || ''}
-                      disabled
+                  disabled
                       className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white/60 cursor-not-allowed"
                     />
                   </div>
@@ -514,10 +514,10 @@ export default function Profile() {
               </div>
             </motion.div>
           </div>
-        </div>
-      </div>
+                    </div>
+                    </div>
 
-      {showOtpModal && (
+              {showOtpModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
@@ -529,9 +529,9 @@ export default function Profile() {
             <p className="text-gray-600 mb-4">
               Enter the OTP sent to {profile.mobile}
             </p>
-            <input
-              type="text"
-              value={otpInput}
+                      <input 
+                        type="text" 
+                        value={otpInput} 
               onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 mb-4"
               placeholder="Enter 6-digit OTP"
@@ -553,8 +553,8 @@ export default function Profile() {
               >
                 Verify
               </button>
-            </div>
-          </motion.div>
+                    </div>
+                  </motion.div>
         </div>
       )}
 
@@ -585,7 +585,7 @@ export default function Profile() {
 
       {saveError && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <motion.div
+      <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
@@ -601,10 +601,10 @@ export default function Profile() {
               className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all"
             >
               Try Again
-            </button>
+          </button>
           </motion.div>
         </div>
-      )}
+        )}
     </div>
   );
 } 

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { supabase } from './supabaseClient';
-import { RiCustomerServiceLine, RiDashboardLine, RiBillLine, RiUserLine, RiSendLine, RiCloseLine, RiCheckLine, RiLoader4Line } from 'react-icons/ri';
+import { RiCustomerServiceLine, RiDashboardLine, RiBillLine, RiUserLine, RiSendPlaneLine, RiCloseLine, RiCheckLine, RiLoader4Line } from 'react-icons/ri';
 
 const gradientColors = [
   '#6366f1', '#22d3ee', '#06b6d4', '#818cf8', '#3b82f6', '#0ea5e9', '#a5b4fc', '#38bdf8', '#67e8f9', '#5eead4', '#f472b6', '#fbbf24',
@@ -255,7 +255,7 @@ export default function Support() {
                     <option value="account">Account Management</option>
                     <option value="service">Service Information</option>
                   </select>
-                </div>
+          </div>
 
                 <div>
                   <label className="block text-sm font-medium text-white mb-2">Subject *</label>
@@ -279,7 +279,7 @@ export default function Support() {
                     onFocus={handleAccountFocus}
                     required
                   />
-                </div>
+                  </div>
 
                 <div>
                   <label className="block text-sm font-medium text-white mb-2">Priority</label>
@@ -292,8 +292,8 @@ export default function Support() {
                     <option value="medium">Medium</option>
                     <option value="high">High</option>
                     <option value="urgent">Urgent</option>
-                  </select>
-                </div>
+                    </select>
+                  </div>
 
                 <div>
                   <label className="block text-sm font-medium text-white mb-2">Message *</label>
@@ -305,7 +305,7 @@ export default function Support() {
                     placeholder="Please describe your issue in detail..."
                     required
                   />
-                </div>
+                  </div>
 
                 <button
                   type="submit"
@@ -319,13 +319,13 @@ export default function Support() {
                     </>
                   ) : (
                     <>
-                      <RiSendLine />
+                      <RiSendPlaneLine />
                       <span>Submit Request</span>
                     </>
                   )}
                 </button>
-              </form>
-            </motion.div>
+                </form>
+              </motion.div>
 
             <motion.div
               initial={{ opacity: 0, x: 20 }}
@@ -348,9 +348,9 @@ export default function Support() {
                           <p className="text-blue-100 text-sm">{link.description}</p>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                              </div>
+                            ))}
+                          </div>
               </div>
 
               <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
@@ -360,11 +360,11 @@ export default function Support() {
                     <div key={index} className="border-b border-white/20 pb-4 last:border-b-0">
                       <h4 className="font-semibold text-white mb-2">{faq.question}</h4>
                       <p className="text-blue-100 text-sm">{faq.answer}</p>
-                    </div>
-                  ))}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            </motion.div>
+              </motion.div>
           </div>
         </div>
       </div>
@@ -392,7 +392,7 @@ export default function Support() {
               >
                 <RiCloseLine className="text-2xl" />
               </button>
-            </div>
+                  </div>
             
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {chatMessages.length === 0 ? (
@@ -434,17 +434,17 @@ export default function Support() {
                   onClick={() => currentMessage.trim() && handleChatMessage(currentMessage.trim())}
                   className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all"
                 >
-                  <RiSendLine />
+                  <RiSendPlaneLine />
                 </button>
-              </div>
             </div>
-          </motion.div>
+          </div>
+        </motion.div>
         </div>
       )}
 
       {showSuccessPopup && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <motion.div
+            <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
@@ -463,7 +463,7 @@ export default function Support() {
             >
               Got it!
             </button>
-          </motion.div>
+            </motion.div>
         </div>
       )}
 
@@ -480,7 +480,7 @@ export default function Support() {
             </div>
             <h3 className="text-xl font-semibold text-gray-800 mb-2">Error</h3>
             <p className="text-gray-600 mb-6">{errorMessage}</p>
-            <button
+          <button
               onClick={() => setShowErrorPopup(false)}
               className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all"
             >

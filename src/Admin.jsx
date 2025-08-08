@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { supabase } from './supabaseClient';
-import { RiCustomerServiceLine, RiCloseLine, RiSendLine, RiLoader4Line, RiCheckLine } from 'react-icons/ri';
+import { RiCustomerServiceLine, RiCloseLine, RiSendPlaneLine, RiLoader4Line, RiCheckLine } from 'react-icons/ri';
 
 const gradientColors = [
   '#6366f1', '#22d3ee', '#06b6d4', '#818cf8', '#3b82f6', '#0ea5e9', '#a5b4fc', '#38bdf8', '#67e8f9', '#5eead4', '#f472b6', '#fbbf24',
@@ -452,7 +452,7 @@ export default function Admin() {
                   </>
                 ) : (
                   <>
-                    <RiSendLine />
+                    <RiSendPlaneLine />
                     <span>Send Response</span>
                   </>
                 )}
