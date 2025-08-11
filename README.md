@@ -32,8 +32,8 @@ A modern water billing management system built with React and Supabase.
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/Nani-j17/Aqua_Bill.git
-   cd Aqua_Bill
+   git clone https://github.com/Nani-j17/Aqua-Bill.git
+   cd Aqua-Bill
    ```
 
 2. Install dependencies:
