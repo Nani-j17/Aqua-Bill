@@ -7,13 +7,13 @@ import { RiBankCardLine, RiBankLine, RiAddLine, RiDownloadLine, RiSearchLine, Ri
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { subDays, subMonths, subYears } from 'date-fns';
-import dayjs from 'dayjs';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
 const gradientColors = [
   '#6366f1', '#22d3ee', '#06b6d4', '#818cf8', '#3b82f6', '#0ea5e9', '#a5b4fc', '#38bdf8', '#67e8f9', '#5eead4', '#f472b6', '#fbbf24',
 ];
+
 function getRandomGradient() {
   let idx1 = Math.floor(Math.random() * gradientColors.length);
   let idx2;
@@ -95,186 +95,188 @@ export default function Billing() {
   useEffect(() => {
     async function fetchUsageData() {
         if (!user) return;
-      try {
-        const { data, error } = await supabase
+
+        try {
+        const { data: usage, error: usageError } = await supabase
       .from('flow_data')
-          .select('flow_rate, liters, created_at')
+            .select('flow_rate, liters, timestamp')
             .eq('user_id', user.id)
-      .order('created_at', { ascending: true });
+            .order('timestamp', { ascending: true });
 
-        if (error) throw error;
-
-        const cleanedData = data.map(item => ({
-          ...item,
-          created_at: item.created_at || item.timestamp
-        }));
-
-        const prevMonth = subMonths(new Date(), 1);
-        const prevMonthStart = new Date(prevMonth.getFullYear(), prevMonth.getMonth(), 1);
-        const prevMonthEnd = new Date(prevMonth.getFullYear(), prevMonth.getMonth() + 1, 0);
-
-        const prevMonthData = cleanedData.filter(item => {
-          const itemDate = new Date(item.created_at);
-          return itemDate >= prevMonthStart && itemDate <= prevMonthEnd;
-        });
-
-        const prevMonthUsage = prevMonthData.reduce((sum, item) => sum + (item.liters || 0), 0);
-        const prevMonthAmount = prevMonthUsage * 10;
-
-        const chartDataForPrevMonth = prevMonthData.map(item => ({
-          date: dayjs(item.created_at).format('DD/MM'),
-          usage: item.liters || 0,
-          amount: +(prevMonthUsage * 10).toFixed(2)
-        }));
-
-        setChartData(chartDataForPrevMonth);
-      } catch (error) {
-      }
+        if (!usageError) {
+                const processedData = (usage || []).map(d => ({
+                    ...d,
+                    created_at: d.timestamp
+                }));
+                setChartData(processedData);
+            }
+        } catch (error) {
+        } finally {
+            setLoading(false);
+        }
     }
-
-    if (user) {
     fetchUsageData();
-      const interval = setInterval(fetchUsageData, 1000);
-      return () => clearInterval(interval);
-    }
+    
+    const interval = setInterval(fetchUsageData, 1000);
+    return () => clearInterval(interval);
 }, [user]);
+
+  const today = new Date();
+  const prevMonth = today.getMonth() === 0 ? 11 : today.getMonth() - 1;
+  const prevYear = today.getMonth() === 0 ? today.getFullYear() - 1 : today.getFullYear();
+  
+  const prevMonthUsage = chartData
+    .filter(d => {
+      const dt = new Date(d.created_at);
+      return dt.getMonth() === prevMonth && dt.getFullYear() === prevYear;
+    })
+    .reduce((sum, d) => sum + (d.liters || 0), 0);
+
+  const prevMonthBillAmount = (prevMonthUsage * 10).toFixed(2);
+
+  const prevMonthData = chartData.filter(d => {
+    const dt = new Date(d.created_at);
+    return dt.getMonth() === prevMonth && dt.getFullYear() === prevYear;
+  });
+
+  const daysInMonth = new Date(prevYear, prevMonth + 1, 0).getDate();
+  const chartDataArray = Array.from({ length: daysInMonth }, (_, i) => {
+    const day = i + 1;
+    const dayData = prevMonthData.filter(d => {
+      const dt = new Date(d.created_at);
+      return dt.getDate() === day;
+    });
+    const usage = dayData.reduce((sum, d) => sum + (d.liters || 0), 0);
+    return {
+      day,
+      usage: usage,
+      amount: +(usage * 10).toFixed(2)
+    };
+  });
+
+  const dueDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+  function formatDateDMY(dateObj) {
+    const d = new Date(dateObj);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+  const dueDateStr = formatDateDMY(dueDate);
 
   useEffect(() => {
       async function fetchAllBills() {
           if (!user) return;
-      try {
           const { data, error } = await supabase
               .from('bills')
               .select('*')
               .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
+              .order('date', { ascending: false });
 
-        if (error) throw error;
-
-        const processedBills = data.map(bill => ({
-          ...bill,
-          date: bill.created_at ? dayjs(bill.created_at).format('DD/MM/YYYY') : 'N/A',
-          dueDate: bill.due_date ? dayjs(bill.due_date).format('DD/MM/YYYY') : 'N/A',
-          amount: bill.amount || 0,
-          status: bill.status || 'Pending'
-        }));
-
-        setAllBills(processedBills);
-        setLoading(false);
-      } catch (error) {
-        setLoading(false);
+          if (!error) {
+              setAllBills(data || []);
+          }
       }
-    }
-
-    if (user) {
       fetchAllBills();
-      const interval = setInterval(fetchAllBills, 1000);
-      return () => clearInterval(interval);
-    }
   }, [user]);
 
   const filteredBills = useMemo(() => {
-    let filtered = allBills;
+    let bills = [...allBills];
 
     if (dateRangeFilter !== 'all') {
         const now = new Date();
-      const filterDate = new Date();
-      
-      switch (dateRangeFilter) {
-        case 'today':
-          filterDate.setHours(0, 0, 0, 0);
-          filtered = filtered.filter(bill => {
-            const billDate = new Date(bill.created_at);
-            return billDate >= filterDate;
-          });
-          break;
-        case 'week':
-          filterDate.setDate(filterDate.getDate() - 7);
-          filtered = filtered.filter(bill => {
-            const billDate = new Date(bill.created_at);
-            return billDate >= filterDate;
-          });
-          break;
-        case 'month':
-          filterDate.setMonth(filterDate.getMonth() - 1);
-          filtered = filtered.filter(bill => {
-            const billDate = new Date(bill.created_at);
-            return billDate >= filterDate;
-          });
-          break;
-        default:
-          break;
-      }
+        let startDate;
+        if (dateRangeFilter === '30d') {
+            startDate = subDays(now, 30);
+        } else if (dateRangeFilter === '6m') {
+            startDate = subMonths(now, 6);
+        } else if (dateRangeFilter === '1y') {
+            startDate = subYears(now, 1);
+        }
+        if (startDate) {
+            bills = bills.filter(bill => new Date(bill.date) >= startDate);
+        }
     }
 
     if (statusFilter !== 'all') {
-      filtered = filtered.filter(bill => bill.status.toLowerCase() === statusFilter.toLowerCase());
+        bills = bills.filter(bill => bill.status === statusFilter);
     }
 
-    if (searchQuery.trim()) {
+    if (searchQuery) {
         const lowercasedQuery = searchQuery.toLowerCase();
-      filtered = filtered.filter(bill =>
-        bill.id.toString().includes(lowercasedQuery) ||
-        bill.amount.toString().includes(lowercasedQuery) ||
-        bill.status.toLowerCase().includes(lowercasedQuery) ||
-        (bill.date && bill.date.includes(lowercasedQuery))
-      );
+        bills = bills.filter(bill =>
+            (bill.bill_number && bill.bill_number.toLowerCase().includes(lowercasedQuery)) ||
+            (bill.amount && bill.amount.toString().includes(lowercasedQuery)) ||
+            (bill.date && bill.date.includes(lowercasedQuery))
+        );
     }
 
-    return filtered;
+    return bills;
 }, [allBills, dateRangeFilter, statusFilter, searchQuery]);
 
-  const paginatedBills = useMemo(() => {
-    const startIndex = (currentPage - 1) * billsPerPage;
-    return filteredBills.slice(startIndex, startIndex + billsPerPage);
-  }, [filteredBills, currentPage]);
+useEffect(() => {
+    setCurrentPage(1);
+}, [dateRangeFilter, statusFilter, searchQuery]);
 
-  const totalPages = Math.ceil(filteredBills.length / billsPerPage);
+const totalPages = Math.max(1, Math.ceil(filteredBills.length / billsPerPage));
+const indexOfLastBill = currentPage * billsPerPage;
+const indexOfFirstBill = indexOfLastBill - billsPerPage;
+const currentBills = filteredBills.slice(indexOfFirstBill, indexOfLastBill);
 
 const paginate = (pageNumber) => {
+  if (pageNumber >= 1 && pageNumber <= totalPages) {
     setCurrentPage(pageNumber);
+  }
 };
 
 const handleExport = () => {
+    if (filteredBills.length === 0) {
+        alert("No data to export.");
+        return;
+    }
+    const headers = ["Date", "Bill Number", "Amount", "Due Date", "Status"];
     const csvContent = [
-      ['Bill ID', 'Date', 'Amount', 'Status', 'Due Date'],
-      ...paginatedBills.map(bill => [
-        bill.id,
-        bill.date,
+        headers.join(","),
+        ...filteredBills.map(bill => [
+            formatDateDMY(bill.date),
+            bill.bill_number,
             bill.amount,
-        bill.status,
-        bill.dueDate
-      ])
-    ].map(row => row.join(',')).join('\n');
+            formatDateDMY(bill.due_date || bill.date),
+            bill.status
+        ].join(","))
+    ].join("\n");
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `bills_${dayjs().format('YYYY-MM-DD')}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-  };
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", "billing_history.csv");
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
 
   const handleRazorpayPayment = async () => {
-    if (!user) return;
+    if (!user) {
+      setPaymentError('User not authenticated');
+      return;
+    }
 
     setPaymentProcessing(true);
     setPaymentError('');
 
     try {
-      const { data: profileData } = await supabase
+      const { data: profile } = await supabase
         .from('profiles')
-        .select('first_name, last_name, mobile')
+        .select('mobile, email, full_name')
         .eq('id', user.id)
         .single();
 
       const userDetails = {
-        name: profileData ? `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim() : 'User',
-        email: user.email,
-        contact: profileData?.mobile || '9999999999'
+        name: profile?.full_name || user.email?.split('@')[0] || 'User',
+        email: profile?.email || user.email,
+        contact: profile?.mobile || '9999999999'
       };
 
       const result = await razorpayService.initiatePayment(
@@ -305,11 +307,17 @@ const handleExport = () => {
       setShowBankDetailsModal(true);
     } else if (methodId === 'card' && cardData) {
       handleCardPayment(cardData);
+    } else {
+      setPaymentError('This payment method is not available yet.');
     }
   };
 
   const handleCardPayment = (cardData) => {
-    setShowPaymentPopup(true);
+    setPaymentError('Card payments will be processed through Razorpay for security.');
+    setTimeout(() => {
+      setPaymentError('');
+      handleRazorpayPayment();
+    }, 2000);
   };
 
   const handleAddPaymentMethod = () => {
@@ -318,17 +326,16 @@ const handleExport = () => {
 
   const handleSaveNewPaymentMethod = () => {
     if (newPaymentMethod.cardNumber && newPaymentMethod.cardHolder && newPaymentMethod.expiry && newPaymentMethod.cvv) {
-      const newCard = {
+      const newMethod = {
         id: `card_${Date.now()}`,
         name: `${newPaymentMethod.cardHolder}'s Card`,
         type: 'card',
         cardNumber: `****${newPaymentMethod.cardNumber.slice(-4)}`,
         cardHolder: newPaymentMethod.cardHolder,
-        expiry: newPaymentMethod.expiry,
         isDefault: false
       };
-
-      setPaymentMethods(prev => [...prev, newCard]);
+      
+      setPaymentMethods(prev => [...prev, newMethod]);
       setNewPaymentMethod({
         type: 'card',
         cardNumber: '',
@@ -340,434 +347,591 @@ const handleExport = () => {
     }
   };
 
-  const prevMonthBillAmount = useMemo(() => {
-    const prevMonth = subMonths(new Date(), 1);
-    const prevMonthStart = new Date(prevMonth.getFullYear(), prevMonth.getMonth(), 1);
-    const prevMonthEnd = new Date(prevMonth.getFullYear(), prevMonth.getMonth() + 1, 0);
 
-    const prevMonthBills = allBills.filter(bill => {
-      const billDate = new Date(bill.created_at);
-      return billDate >= prevMonthStart && billDate <= prevMonthEnd;
-    });
 
-    return prevMonthBills.reduce((sum, bill) => sum + (bill.amount || 0), 0);
-  }, [allBills]);
+  const chartJsData = {
+    labels: chartDataArray.map(d => d.day),
+    datasets: [
+      {
+        label: 'Amount (₹)',
+        data: chartDataArray.map(d => d.amount),
+        fill: true,
+        backgroundColor: 'rgba(251, 191, 36, 0.15)',
+        borderColor: 'rgba(251, 191, 36, 1)',
+        pointBackgroundColor: 'rgba(251, 191, 36, 1)',
+        tension: 0.4,
+        pointRadius: 0,
+        borderWidth: 2,
+      },
+      {
+        label: 'Usage (L)',
+        data: chartDataArray.map(d => d.usage),
+        fill: true,
+        backgroundColor: 'rgba(59, 130, 246, 0.15)',
+        borderColor: 'rgba(59, 130, 246, 1)',
+        pointBackgroundColor: 'rgba(59, 130, 246, 1)',
+        tension: 0.4,
+        pointRadius: 0,
+        borderWidth: 2,
+      },
+    ],
+  };
 
   const chartJsOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: {
-        display: false
-      },
-      tooltip: {
-        mode: 'index',
-        intersect: false,
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        titleColor: 'white',
-        bodyColor: 'white',
-        borderColor: '#3B82F6',
-        borderWidth: 1
-      }
+      legend: { display: false },
+      title: { display: false },
+      tooltip: { mode: 'index', intersect: false },
     },
+    interaction: { mode: 'nearest', axis: 'x', intersect: false },
     scales: {
       x: {
-        grid: {
-          display: false
-        },
-        ticks: {
-          color: '#6B7280'
-        }
+        title: { display: true, text: 'Day' },
+        grid: { display: false },
       },
       y: {
-        grid: {
-          color: 'rgba(107, 114, 128, 0.1)'
-        },
-        ticks: {
-          color: '#6B7280'
-        }
-      }
-    },
-    interaction: {
-      mode: 'nearest',
-      axis: 'x',
-      intersect: false
-    }
-  };
-
-  const chartDataForDisplay = {
-    labels: chartData.map(item => item.date),
-    datasets: [
-      {
-        label: 'Usage (Liters)',
-        data: chartData.map(item => item.usage),
-        borderColor: '#3B82F6',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        borderWidth: 2,
-        fill: true,
-        tension: 0.4
+        title: { display: true, text: 'Liters / Rupees' },
+        grid: { display: false },
       },
-      {
-        label: 'Amount (₹)',
-        data: chartData.map(item => item.amount),
-        borderColor: '#F59E0B',
-        backgroundColor: 'rgba(245, 158, 11, 0.1)',
-        borderWidth: 2,
-        fill: true,
-        tension: 0.4
-      }
-    ]
+    },
   };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: gradient }}>
-        <div className="bg-white rounded-lg shadow-lg p-8 flex flex-col items-center">
-          <RiLoader4Line className="animate-spin text-4xl text-blue-500 mb-4" />
-          <p className="text-gray-600">Loading billing information...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen w-full flex flex-col" style={{ background: gradient, transition: 'background 1s cubic-bezier(.4,0,.2,1)' }}>
-      <div className="flex-1 p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-3xl font-bold text-white mb-2">Billing & Payments</h1>
-              <p className="text-blue-100">Manage your bills and payment methods</p>
+      <header className="w-full px-0 py-6 flex justify-center">
+        <motion.div initial={{ opacity: 0, y: -30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: 'easeOut' }} className="w-full max-w-5xl flex items-center justify-between px-6 md:px-10">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-white/60 shadow-lg backdrop-blur-md">
+              <RiBillLine size={32} className="text-primary" />
+            </span>
+            <span className="text-3xl font-pacifico text-primary tracking-tight select-none">AquaBill</span>
+          </div>
+          <nav className="flex-1 flex justify-center">
+            <div className="flex gap-2 bg-white/60 backdrop-blur-md rounded-full px-2 py-1 shadow-lg">
+              <Link to="/dashboard" className="flex items-center gap-1 px-6 py-2 text-gray-600 hover:text-primary hover:bg-blue-50 rounded-full font-medium transition-colors"><RiDashboardLine /><span>Dashboard</span></Link>
+              <Link to="/billing" className="flex items-center gap-1 px-6 py-2 text-primary bg-blue-50 rounded-full font-medium transition-colors"><RiBillLine /><span>Billing</span></Link>
+              <Link to="/support" className="flex items-center gap-1 px-6 py-2 text-gray-600 hover:text-primary hover:bg-blue-50 rounded-full font-medium transition-colors"><RiCustomerServiceLine /><span>Support</span></Link>
             </div>
-            <div className="flex items-center space-x-4">
-              <Link to="/dashboard" className="flex items-center space-x-2 bg-white/20 backdrop-blur-sm text-white px-4 py-2 rounded-lg hover:bg-white/30 transition-all">
-                <RiDashboardLine className="text-xl" />
-                <span>Dashboard</span>
+          </nav>
+          <div className="flex items-center gap-6">
+            <div className="flex items-center bg-white/60 rounded-full px-2 py-2 shadow backdrop-blur-md">
+              <Link to="/profile">
+                <span className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden">
+                  {profilePhotoUrl ? (
+                    <img src={profilePhotoUrl} alt="Profile" className="object-cover w-full h-full" />
+                  ) : (
+                    <RiUserLine size={32} className="text-primary" />
+                  )}
+                </span>
               </Link>
-              <div className="relative">
-                <img
-                  src={profilePhotoUrl || 'https://via.placeholder.com/40x40?text=U'}
-                  alt="Profile"
-                  className="w-10 h-10 rounded-full border-2 border-white/30"
-                />
-              </div>
             </div>
           </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-white">Previous Month Usage</h3>
-                <div className="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                  <RiBillLine className="text-2xl text-blue-300" />
-                </div>
-              </div>
-              <div className="text-3xl font-bold text-white mb-2">
-                {chartData.reduce((sum, item) => sum + (item.usage || 0), 0).toFixed(1)} L
-              </div>
-              <p className="text-blue-100 text-sm">Water consumption last month</p>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.1 }}
-              className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-white">Previous Month Bill</h3>
-                <div className="w-12 h-12 bg-yellow-500/20 rounded-lg flex items-center justify-center">
-                  <RiBankLine className="text-2xl text-yellow-300" />
-                </div>
-                    </div>
-              <div className="text-3xl font-bold text-white mb-2">
-                ₹{prevMonthBillAmount.toFixed(2)}
-                    </div>
-              <p className="text-blue-100 text-sm">Total amount due</p>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.2 }}
-              className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-white">Payment Status</h3>
-                <div className="w-12 h-12 bg-green-500/20 rounded-lg flex items-center justify-center">
-                  <RiBankCardLine className="text-2xl text-green-300" />
-                </div>
-              </div>
-              <div className="text-3xl font-bold text-white mb-2">
-                {prevMonthBillAmount > 0 ? 'Pending' : 'Paid'}
-              </div>
-              <p className="text-blue-100 text-sm">Last payment status</p>
-            </motion.div>
-          </div>
-
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5 }}
-            className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20"
-          >
-            <h3 className="text-xl font-semibold text-white mb-4">Previous Month Usage Chart</h3>
-            <div className="h-64">
-              <Line data={chartDataForDisplay} options={chartJsOptions} />
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-semibold text-white">Payment Methods</h3>
-              <button
-                onClick={handleAddPaymentMethod}
-                className="flex items-center space-x-2 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-all"
+        </motion.div>
+      </header>
+      <main className="flex-1 w-full flex flex-col items-center px-2 md:px-0">
+        <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: 'easeOut' }} className="w-full max-w-5xl mt-6">
+          <div className="mb-8">
+            <h2 className="text-3xl font-semibold text-white drop-shadow">Billing & Payments</h2>
+            <p className="text-gray-100 mt-1">Manage your bills, view payment history, and make payments</p>
+            
+            {paymentSuccess && (
+              <motion.div
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="mt-4 bg-green-50 border border-green-200 rounded-lg p-4"
               >
-                <RiAddLine className="text-lg" />
-                <span>Add Method</span>
-              </button>
-            </div>
-            <div className="space-y-3">
-              {paymentMethods.map((method) => (
-                <div
-                  key={method.id}
-                  onClick={() => handlePaymentMethodSelect(method.id, method)}
-                  className="bg-white/5 backdrop-blur-sm rounded-lg p-4 border border-white/10 hover:bg-white/10 transition-all cursor-pointer"
+                <div className="flex items-center">
+                  <svg className="w-5 h-5 text-green-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <p className="text-green-800 font-medium">Payment successful! Your payment has been processed.</p>
+                </div>
+              </motion.div>
+            )}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} whileHover={{ scale: 1.03, boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.15)', borderColor: '#3b82f6' }} transition={{ delay: 0.1, duration: 0.5, type: 'spring' }} className="bg-white/40 backdrop-blur-lg p-6 rounded-2xl shadow-lg border border-white/30 hover:border-primary transition-all duration-300 cursor-pointer lg:col-span-2">
+              <div className="flex flex-col md:flex-row md:items-center justify-between">
+                <div>
+                                      <p className="text-gray-500 text-sm">Previous Month Usage</p>
+                  <div className="flex items-baseline">
+                      <h3 className="text-4xl font-bold text-gray-800 mt-1">₹{prevMonthBillAmount}</h3>
+                      <span className="ml-2 text-gray-500">({prevMonthUsage.toFixed(2)} liters)</span>
+                  </div>
+                    <p className="text-gray-500 text-sm mt-1">Due on <span className="font-medium text-gray-700">{dueDateStr}</span></p>
+                  <div className="mt-1 flex items-center">
+                    <span className="text-sm text-gray-500">Last payment: <span className="font-medium">--</span> on <span className="font-medium">--</span></span>
+                  </div>
+                </div>
+                <div className="mt-4 md:mt-0">
+                  <button
+                    onClick={() => setShowPaymentPopup(true)}
+                    className="px-6 py-2 rounded-full font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors duration-200 flex items-center gap-2 whitespace-nowrap"
+                  >
+                    <RiBankCardLine className="mr-2" /> Make Payment
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+            <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} whileHover={{ scale: 1.03, boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.10)', borderColor: '#3b82f6' }} transition={{ delay: 0.2, duration: 0.5, type: 'spring' }} className="bg-white/40 backdrop-blur-lg p-6 rounded-2xl shadow-lg border border-white/30 hover:border-primary transition-all duration-300 cursor-pointer">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Payment Methods</h3>
+              <div className="space-y-3">
+                <div 
+                  onClick={() => handlePaymentMethodSelect('razorpay')}
+                  className="border border-purple-500 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-3 flex items-center justify-between transition-all duration-300 shadow-md cursor-pointer hover:shadow-lg hover:scale-102"
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                        {method.type === 'gateway' ? (
-                          <div className="text-white font-bold text-sm">RZ</div>
-                        ) : method.type === 'bank' ? (
-                          <RiBankLine className="text-xl text-blue-300" />
-                        ) : (
-                          <RiBankCardLine className="text-xl text-blue-300" />
-                        )}
+                  <div className="flex items-center">
+                    <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center mr-3 shadow-sm">
+                      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="24" height="24" rx="4" fill="#3B82F6"/>
+                        <text x="12" y="16" fontFamily="Arial, Helvetica, sans-serif" fontWeight="bold" fontSize="12" fill="white" textAnchor="middle">RZ</text>
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-800 text-sm">Razorpay</p>
+                      <p className="text-xs text-gray-600">UPI, Cards, Net Banking</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end">
+                    <span className="text-xs font-medium text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full mb-1">Default</span>
+                    <div className="flex items-center gap-1">
+                      <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                      <span className="text-xs text-green-600 font-medium">Active</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div 
+                  onClick={() => handlePaymentMethodSelect('bank')}
+                  className="border border-blue-500 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-3 flex items-center justify-between transition-all duration-300 shadow-md cursor-pointer hover:shadow-lg hover:scale-102"
+                >
+                  <div className="flex items-center">
+                    <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-blue-600 mr-3 shadow-sm">
+                      <RiBankLine size={18} />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-800 text-sm">Bank Account</p>
+                      <p className="text-xs text-gray-600">****1234</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end">
+                    <span className="text-xs font-medium text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full mb-1">Linked</span>
+                </div>
+                </div>
+
+                {paymentMethods.filter(method => method.type === 'card').map((card) => (
+                  <div 
+                    key={card.id}
+                    onClick={() => handlePaymentMethodSelect('card', card)}
+                    className="border border-orange-500 bg-gradient-to-r from-orange-50 to-amber-50 rounded-lg p-3 flex items-center justify-between transition-all duration-300 shadow-md cursor-pointer hover:shadow-lg hover:scale-102"
+                  >
+                    <div className="flex items-center">
+                      <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-orange-600 mr-3 shadow-sm">
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4zM18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z"/>
+                        </svg>
                       </div>
                       <div>
-                        <h4 className="font-semibold text-white">{method.name}</h4>
-                        <p className="text-blue-100 text-sm">{method.description || method.cardNumber}</p>
+                        <p className="font-semibold text-gray-800 text-sm">{card.name}</p>
+                        <p className="text-xs text-gray-600">{card.cardNumber}</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-xs font-medium text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full mb-1">Card</span>
+                    </div>
                   </div>
-                </div>
-                    {method.isDefault && (
-                      <span className="bg-green-500 text-white px-2 py-1 rounded-full text-xs">Active</span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        </div>
-      </div>
+                ))}
 
-      <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20"
-          >
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold text-white">Bill History</h3>
-              <div className="flex items-center space-x-4">
-                <div className="flex items-center space-x-2">
-                    <RiSearchLine className="text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search bills..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                  />
+                <div 
+                  onClick={handleAddPaymentMethod}
+                  className="border border-green-500 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-3 flex items-center justify-between transition-all duration-300 shadow-md cursor-pointer hover:shadow-lg hover:scale-102"
+                >
+                  <div className="flex items-center">
+                    <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-green-600 mr-3 shadow-sm">
+                      <RiAddLine size={18} />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-800 text-sm">Add Payment Method</p>
+                      <p className="text-xs text-gray-600">Credit/Debit Card</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end">
+                    <span className="text-xs font-medium text-green-600 bg-green-100 px-2 py-0.5 rounded-full mb-1">New</span>
+                  </div>
                 </div>
-                <select
-                  value={dateRangeFilter}
-                  onChange={(e) => setDateRangeFilter(e.target.value)}
-                  className="bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-                >
-                  <option value="all">All Time</option>
-                  <option value="today">Today</option>
-                  <option value="week">This Week</option>
-                  <option value="month">This Month</option>
-                </select>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-                >
-                  <option value="all">All Status</option>
-                  <option value="paid">Paid</option>
-                  <option value="pending">Pending</option>
-                  <option value="overdue">Overdue</option>
-                </select>
-                <button
-                  onClick={handleExport}
-                  className="flex items-center space-x-2 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-all"
-                >
-                  <RiDownloadLine className="text-lg" />
-                  <span>Export</span>
+              </div>
+            </motion.div>
+          </div>
+          <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.7 }} className="bg-white/40 backdrop-blur-lg p-6 rounded-2xl shadow-lg border border-white/30 mb-8">
+            <div className="flex flex-col md:flex-row md:items-center justify-between mb-6">
+              <h3 className="text-xl font-semibold text-gray-800">Billing History</h3>
+              <div className="flex flex-wrap items-center gap-3 mt-4 md:mt-0">
+                <div className="relative">
+                    <select value={dateRangeFilter} onChange={e => setDateRangeFilter(e.target.value)} className="appearance-none bg-white text-gray-700 py-2 pl-3 pr-8 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
+                        <option value="all">All Time</option>
+                        <option value="30d">Last 30 Days</option>
+                        <option value="6m">Last 6 Months</option>
+                        <option value="1y">Last Year</option>
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                      <RiArrowDownSLine />
+                  </div>
+                </div>
+                <div className="relative">
+                    <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="appearance-none bg-white text-gray-700 py-2 pl-3 pr-8 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
+                        <option value="all">All Statuses</option>
+                        <option value="Paid">Paid</option>
+                        <option value="Unpaid">Unpaid</option>
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                      <RiArrowDownSLine />
+                  </div>
+                </div>
+                <div className="relative flex-grow md:max-w-xs">
+                    <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} type="text" className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Search bills..." />
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <RiSearchLine className="text-gray-400" />
+                  </div>
+                </div>
+                <button onClick={handleExport} className="px-6 py-2 rounded-full font-medium bg-white text-primary border border-primary hover:bg-primary hover:text-white transition-colors duration-200 flex items-center gap-2 whitespace-nowrap">
+                  <RiDownloadLine /> Export
                 </button>
               </div>
             </div>
-
             <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="border-b border-white/20">
-                    <th className="pb-3 text-white font-semibold">Bill ID</th>
-                    <th className="pb-3 text-white font-semibold">Date</th>
-                    <th className="pb-3 text-white font-semibold">Amount</th>
-                    <th className="pb-3 text-white font-semibold">Status</th>
-                    <th className="pb-3 text-white font-semibold">Due Date</th>
-                    <th className="pb-3 text-white font-semibold">Actions</th>
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bill Number</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {paginatedBills.map((bill) => (
-                    <tr key={bill.id} className="border-b border-white/10 hover:bg-white/5">
-                      <td className="py-3 text-white">#{bill.id}</td>
-                      <td className="py-3 text-white">{bill.date}</td>
-                      <td className="py-3 text-white">₹{bill.amount.toFixed(2)}</td>
-                      <td className="py-3">
-                        <span className={`px-2 py-1 rounded-full text-xs ${
-                          bill.status.toLowerCase() === 'paid' 
-                            ? 'bg-green-500/20 text-green-300' 
-                            : bill.status.toLowerCase() === 'overdue'
-                            ? 'bg-red-500/20 text-red-300'
-                            : 'bg-yellow-500/20 text-yellow-300'
-                        }`}>
+                <tbody className="bg-white divide-y divide-gray-200">
+                        {currentBills.map(bill => (
+                            <tr key={bill.id} className="table-row-hover">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{formatDateDMY(bill.date)}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{bill.bill_number}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">₹{bill.amount}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{formatDateDMY(bill.due_date || bill.date)}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                                    <span className={`status-badge ${bill.status.toLowerCase() === 'paid' ? 'status-paid' : 'status-unpaid'}`}>
                                         {bill.status}
                                     </span>
                       </td>
-                      <td className="py-3 text-white">{bill.dueDate}</td>
-                      <td className="py-3">
-                        <button className="text-blue-300 hover:text-blue-200 transition-colors">
-                          View Details
-                        </button>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex items-center justify-end gap-2">
+                          <button className="text-primary hover:text-blue-700 transition-colors"><RiDownloadLine /></button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-
-            {totalPages > 1 && (
-              <div className="flex items-center justify-center space-x-2 mt-6">
-                <button
-                  onClick={() => paginate(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="px-3 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Previous
+            <div className="mt-6 flex items-center justify-between">
+                <div className="text-sm text-gray-500">
+                    {filteredBills.length === 0 ? (
+                        "No results found"
+                    ) : (
+                        <>
+                    Showing <span className="font-medium">{indexOfFirstBill + 1}</span> to <span className="font-medium">{Math.min(indexOfLastBill, filteredBills.length)}</span> of <span className="font-medium">{filteredBills.length}</span> results
+                        </>
+                    )}
+                </div>
+              {filteredBills.length > 0 && (
+              <div className="flex items-center space-x-2">
+                    <button onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1} className="px-3 py-1 border border-gray-300 rounded-button text-gray-600 hover:text-primary hover:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                        Prev
                     </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                  <button
-                    key={page}
-                    onClick={() => paginate(page)}
-                    className={`px-3 py-2 rounded-lg ${
-                      currentPage === page
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-white/10 text-white hover:bg-white/20'
-                    }`}
-                  >
-                    {page}
+                    {[...Array(totalPages).keys()].map(number => (
+                        <button key={number + 1} onClick={() => paginate(number + 1)} className={`px-3 py-1 border rounded-button transition-colors ${currentPage === number + 1 ? 'bg-primary text-white' : 'border-gray-300 text-gray-600 hover:text-primary hover:border-primary'}`}>
+                            {number + 1}
                         </button>
                     ))}
-                <button
-                  onClick={() => paginate(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className="px-3 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
+                    <button onClick={() => paginate(currentPage + 1)} disabled={currentPage === totalPages} className="px-3 py-1 border border-gray-300 rounded-button text-gray-600 hover:text-primary hover:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                         Next
                     </button>
               </div>
               )}
+            </div>
           </motion.div>
-
-      {showPaymentPopup && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="bg-white rounded-xl p-6 w-full max-w-md mx-4"
+  initial={{ opacity: 0, y: 30 }}
+  animate={{ opacity: 1, y: 0 }}
+  whileHover={{ scale: 1.03, boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.15)', borderColor: '#3b82f6' }}
+  transition={{ delay: 0.4, duration: 0.7, type: 'spring' }}
+  className="bg-white/40 backdrop-blur-lg p-6 rounded-2xl shadow-lg border border-white/30 hover:border-primary transition-all duration-300 cursor-pointer mb-8"
+>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-semibold text-gray-800">Previous Month Usage</h3>
+    <div className="flex gap-6">
+      <div className="flex items-center gap-2">
+        <span
+          style={{
+            display: 'inline-block',
+            width: '1.25em',
+            height: '1.25em',
+            borderRadius: '50%',
+            background: 'rgba(251, 191, 36, 1)',
+          }}
+        />
+        <span className="text-gray-700 font-medium">Amount (₹)</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span
+          style={{
+            display: 'inline-block',
+            width: '1.25em',
+            height: '1.25em',
+            borderRadius: '50%',
+            background: 'rgba(59, 130, 246, 1)',
+          }}
+        />
+        <span className="text-gray-700 font-medium">Usage (L)</span>
+      </div>
+    </div>
+                </div>
+  <div className="relative w-full" style={{ height: '350px' }}>
+    <Line data={chartJsData} options={chartJsOptions} style={{ width: '100%', height: '100%' }} />
+            </div>
+          </motion.div>
+        </motion.div>
+      </main>
+
+      {/* Payment Popup Overlay */}
+      {showPaymentPopup && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setShowPaymentPopup(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.8, opacity: 0 }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-xl font-semibold text-gray-800 mb-4">Make Payment</h3>
-            <p className="text-gray-600 mb-6">
-              You are about to pay ₹{prevMonthBillAmount.toFixed(2)} for your previous month's water bill.
-            </p>
-            <div className="flex space-x-3">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-gray-800">Select Payment Method</h3>
               <button
                 onClick={() => setShowPaymentPopup(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleRazorpayPayment}
-                disabled={paymentProcessing}
-                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all disabled:opacity-50"
-              >
-                {paymentProcessing ? (
-                  <div className="flex items-center justify-center space-x-2">
-                    <RiLoader4Line className="animate-spin" />
-                    <span>Processing...</span>
-      </div>
-                ) : (
-                  'Pay Now'
-                )}
-              </button>
-            </div>
-            {paymentError && (
-              <p className="text-red-500 text-sm mt-3">{paymentError}</p>
-            )}
-          </motion.div>
-        </div>
-      )}
-
-      {showAddPaymentModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="bg-white rounded-xl p-6 w-full max-w-md mx-4"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-semibold text-gray-800">Add Payment Method</h3>
-              <button
-                onClick={() => setShowAddPaymentModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
+            
+            <div className="space-y-4">
+              {paymentError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <div className="flex items-center">
+                    <svg className="w-5 h-5 text-red-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                    <p className="text-red-600 text-sm font-medium">{paymentError}</p>
+                  </div>
+                </div>
+              )}
+              
+              <div 
+                onClick={() => handlePaymentMethodSelect('razorpay')}
+                className="border-2 border-purple-500 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-4 flex items-center justify-between transition-all duration-300 shadow-lg cursor-pointer hover:shadow-xl hover:scale-105"
+              >
+                <div className="flex items-center">
+                  <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center mr-4 shadow-md">
+                    <svg viewBox="0 0 24 24" width="32" height="32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <rect width="24" height="24" rx="4" fill="#3B82F6"/>
+                      <text x="12" y="16" fontFamily="Arial, Helvetica, sans-serif" fontWeight="bold" fontSize="12" fill="white" textAnchor="middle">RZ</text>
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-800 text-lg">Razorpay</p>
+                    <p className="text-sm text-gray-600">UPI, Cards, Net Banking</p>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end">
+                  <span className="text-xs font-medium text-purple-600 bg-purple-100 px-3 py-1 rounded-full mb-1">Recommended</span>
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span className="text-xs text-green-600 font-medium">Secure</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="border border-gray-200 rounded-xl p-4 flex items-center justify-between transition-all duration-300 cursor-pointer hover:border-blue-300 hover:bg-blue-50">
+                <div className="flex items-center">
+                  <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-primary mr-3">
+                    <RiBankLine size={22} />
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-800">Bank Account</p>
+                    <p className="text-xs text-gray-500">****----</p>
+                  </div>
+                </div>
+              </div>
+              
+              <button className="w-full mt-4 px-4 py-2 border border-dashed border-gray-300 rounded-xl text-gray-600 hover:text-primary hover:border-primary transition-colors flex items-center justify-center gap-2">
+                <RiAddLine /> Add Payment Method
+              </button>
+            </div>
+            
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => setShowPaymentPopup(false)}
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-red-50 hover:border-red-300 hover:text-red-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => handlePaymentMethodSelect('razorpay')}
+                disabled={paymentProcessing}
+                className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium disabled:bg-blue-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {paymentProcessing ? (
+                  <>
+                    <RiLoader4Line className="animate-spin" size={20} />
+                    Processing...
+                  </>
+                ) : (
+                  `Pay ₹${prevMonthBillAmount}`
+                )}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+
+      {showBankDetailsModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setShowBankDetailsModal(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.8, opacity: 0 }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-gray-800">Bank Account Details</h3>
+              <button
+                onClick={() => setShowBankDetailsModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="bg-blue-50 rounded-lg p-4">
+                <div className="flex items-center mb-3">
+                  <RiBankLine size={24} className="text-blue-600 mr-3" />
+                  <h4 className="font-semibold text-gray-800">State Bank of India</h4>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Account Number:</span>
+                    <span className="font-medium">****1234</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Account Type:</span>
+                    <span className="font-medium">Savings</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">IFSC Code:</span>
+                    <span className="font-medium">SBIN0001234</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Branch:</span>
+                    <span className="font-medium">Main Branch</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-yellow-50 rounded-lg p-4">
+                <div className="flex items-center">
+                  <svg className="w-5 h-5 text-yellow-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  <p className="text-yellow-800 text-sm">This account is linked for automatic bill payments.</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="mt-6">
+              <button
+                onClick={() => setShowBankDetailsModal(false)}
+                className="w-full px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
+              >
+                Close
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+
+      {showAddPaymentModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setShowAddPaymentModal(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.8, opacity: 0 }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-gray-800">Add Payment Method</h3>
+              <button
+                onClick={() => setShowAddPaymentModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Card Number</label>
                 <input
                   type="text"
-                  placeholder="4111 1111 1111 1111"
+                  placeholder="1234 5678 9012 3456"
                   value={newPaymentMethod.cardNumber}
                   onChange={(e) => setNewPaymentMethod({...newPaymentMethod, cardNumber: e.target.value})}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
                   maxLength="19"
                 />
-                  </div>
-                  <div>
+              </div>
+              
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Card Holder Name</label>
                 <input
                   type="text"
@@ -777,6 +941,7 @@ const handleExport = () => {
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
                 />
               </div>
+              
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Expiry Date</label>
@@ -798,112 +963,37 @@ const handleExport = () => {
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
                     maxLength="5"
                   />
-                  </div>
-                  <div>
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">CVV</label>
                   <input
                     type="text"
                     placeholder="123"
                     value={newPaymentMethod.cvv}
-                    onChange={(e) => setNewPaymentMethod({...newPaymentMethod, cvv: e.target.value.replace(/\D/g, '').slice(0, 3)})}
+                    onChange={(e) => setNewPaymentMethod({...newPaymentMethod, cvv: e.target.value})}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    maxLength="3"
+                    maxLength="4"
                   />
                 </div>
               </div>
             </div>
-            <div className="flex space-x-3 mt-6">
+            
+            <div className="mt-6 flex gap-3">
               <button
                 onClick={() => setShowAddPaymentModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all"
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button 
                 onClick={handleSaveNewPaymentMethod}
-                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all"
+                className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
               >
                 Add Card
               </button>
             </div>
           </motion.div>
-        </div>
-      )}
-
-      {showBankDetailsModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="bg-white rounded-xl p-6 w-full max-w-md mx-4"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-semibold text-gray-800">Bank Account Details</h3>
-              <button
-                onClick={() => setShowBankDetailsModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Bank Name</label>
-                <p className="text-gray-800 font-medium">State Bank of India</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Account Number</label>
-                <p className="text-gray-800 font-medium">****1234</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">IFSC Code</label>
-                <p className="text-gray-800 font-medium">SBIN0001234</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Branch</label>
-                <p className="text-gray-800 font-medium">Main Branch, Mumbai</p>
-              </div>
-            </div>
-            <div className="mt-6">
-              <button
-                onClick={() => setShowBankDetailsModal(false)}
-                className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all"
-              >
-                Close
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
-
-      {paymentSuccess && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="bg-white rounded-xl p-6 w-full max-w-md mx-4 text-center"
-          >
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <h3 className="text-xl font-semibold text-gray-800 mb-2">Payment Successful!</h3>
-            <p className="text-gray-600 mb-6">
-              Your payment of ₹{prevMonthBillAmount.toFixed(2)} has been processed successfully.
-            </p>
-            <button
-              onClick={() => setPaymentSuccess(false)}
-              className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all"
-            >
-              Got it!
-            </button>
         </motion.div>
-        </div>
       )}
     </div>
   );
