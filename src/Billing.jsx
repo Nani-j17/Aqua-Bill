@@ -125,6 +125,15 @@ export default function Billing() {
   const prevMonth = today.getMonth() === 0 ? 11 : today.getMonth() - 1;
   const prevYear = today.getMonth() === 0 ? today.getFullYear() - 1 : today.getFullYear();
   
+  // Calculate current month usage
+  const currentMonthUsage = chartData
+    .filter(d => {
+      const dt = new Date(d.created_at);
+      return dt.getMonth() === today.getMonth() && dt.getFullYear() === today.getFullYear();
+    })
+    .reduce((sum, d) => sum + (d.liters || 0), 0);
+
+  // Calculate previous month usage
   const prevMonthUsage = chartData
     .filter(d => {
       const dt = new Date(d.created_at);
@@ -132,7 +141,16 @@ export default function Billing() {
     })
     .reduce((sum, d) => sum + (d.liters || 0), 0);
 
-  const prevMonthBillAmount = (prevMonthUsage * 10).toFixed(2);
+  // Get unpaid previous bills
+  const unpaidPreviousBills = allBills
+    .filter(bill => bill.status !== 'Paid')
+    .reduce((sum, bill) => sum + parseFloat(bill.amount), 0);
+
+  // Current bill = current month usage + unpaid previous bills
+  const currentBillAmount = ((currentMonthUsage / 1000) * 4.5) + unpaidPreviousBills;
+  
+  // Previous month bill amount for display
+  const prevMonthBillAmount = ((prevMonthUsage / 1000) * 4.5).toFixed(2);
 
   const prevMonthData = chartData.filter(d => {
     const dt = new Date(d.created_at);
@@ -175,10 +193,68 @@ export default function Billing() {
 
           if (!error) {
               setAllBills(data || []);
+              // Generate current month bill if it doesn't exist
+              await ensureCurrentMonthBill();
           }
       }
       fetchAllBills();
   }, [user]);
+
+  const ensureCurrentMonthBill = async () => {
+    if (!user) return;
+    
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    
+    // Check if bill for current month exists
+    const { data: existingBills } = await supabase
+      .from('bills')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('date', { ascending: false })
+      .limit(1);
+      
+    const billExists = existingBills && existingBills[0] &&
+      new Date(existingBills[0].date).getMonth() === currentMonth &&
+      new Date(existingBills[0].date).getFullYear() === currentYear;
+      
+    if (!billExists) {
+      // Calculate current month usage
+      const currentMonthUsage = chartData
+        .filter(d => {
+          const dt = new Date(d.created_at);
+          return dt.getMonth() === currentMonth && dt.getFullYear() === currentYear;
+        })
+        .reduce((sum, d) => sum + (d.liters || 0), 0);
+      
+      const amount = ((currentMonthUsage / 1000) * 4.5).toFixed(2);
+      const dueDate = new Date(currentYear, currentMonth + 1, 1).toISOString().slice(0, 10);
+      
+      // Generate bill number
+      const billNumber = `AB${currentYear}${(currentMonth + 1).toString().padStart(2, '0')}${user.id.substring(0, 4).toUpperCase()}`;
+      
+      // Insert new bill
+      await supabase.from('bills').insert([{
+        user_id: user.id,
+        bill_number: billNumber,
+        date: today.toISOString().slice(0, 10),
+        amount,
+        status: 'Unpaid',
+        due_date: dueDate
+      }]);
+      
+      // Refresh bills list
+      const { data: updatedBills } = await supabase
+        .from('bills')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('date', { ascending: false });
+        
+      if (updatedBills) {
+        setAllBills(updatedBills);
+      }
+    }
+  };
 
   const filteredBills = useMemo(() => {
     let bills = [...allBills];
@@ -280,7 +356,7 @@ const handleExport = () => {
       };
 
       const result = await razorpayService.initiatePayment(
-        parseFloat(prevMonthBillAmount),
+        parseFloat(currentBillAmount),
         userDetails
       );
 
@@ -456,14 +532,20 @@ const handleExport = () => {
             <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} whileHover={{ scale: 1.03, boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.15)', borderColor: '#3b82f6' }} transition={{ delay: 0.1, duration: 0.5, type: 'spring' }} className="bg-white/40 backdrop-blur-lg p-6 rounded-2xl shadow-lg border border-white/30 hover:border-primary transition-all duration-300 cursor-pointer lg:col-span-2">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                 <div>
-                                      <p className="text-gray-500 text-sm">Previous Month Usage</p>
+                  <p className="text-gray-500 text-sm">Current Bill</p>
                   <div className="flex items-baseline">
-                      <h3 className="text-3xl md:text-4xl font-bold text-gray-800 mt-1">₹{prevMonthBillAmount}</h3>
-                      <span className="md:ml-2 text-gray-500">({prevMonthUsage.toFixed(2)} liters)</span>
+                      <h3 className="text-3xl md:text-4xl font-bold text-gray-800 mt-1">₹{currentBillAmount.toFixed(2)}</h3>
+                      <span className="md:ml-2 text-gray-500">({currentMonthUsage.toFixed(2)} liters)</span>
                   </div>
                     <p className="text-gray-500 text-sm mt-1">Due on <span className="font-medium text-gray-700">{dueDateStr}</span></p>
                   <div className="mt-1 flex items-center">
-                    <span className="text-sm text-gray-500">Last payment: <span className="font-medium">--</span> on <span className="font-medium">--</span></span>
+                    <span className="text-sm text-gray-500">
+                      {unpaidPreviousBills > 0 ? (
+                        <>Includes ₹{unpaidPreviousBills.toFixed(2)} unpaid previous bills</>
+                      ) : (
+                        <>Last payment: <span className="font-medium">--</span> on <span className="font-medium">--</span></>
+                      )}
+                    </span>
                   </div>
                 </div>
                 <div className="mt-4 md:mt-0">
@@ -602,7 +684,44 @@ const handleExport = () => {
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+              {/* Mobile Cards */}
+              <div className="md:hidden space-y-4">
+                {currentBills.map(bill => (
+                  <div key={bill.id} className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Bill #{bill.bill_number || 'N/A'}</p>
+                        <p className="text-xs text-gray-500">{formatDateDMY(bill.date)}</p>
+                      </div>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        bill.status.toLowerCase() === 'paid' 
+                          ? 'bg-green-100 text-green-700' 
+                          : 'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {bill.status}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-gray-500">Amount</p>
+                        <p className="font-medium text-gray-900">₹{bill.amount}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500">Due Date</p>
+                        <p className="font-medium text-gray-900">{formatDateDMY(bill.due_date || bill.date)}</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex justify-end">
+                      <button className="text-primary hover:text-blue-700 transition-colors p-1">
+                        <RiDownloadLine />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop Table */}
+              <table className="hidden md:table min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
@@ -615,13 +734,17 @@ const handleExport = () => {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                         {currentBills.map(bill => (
-                            <tr key={bill.id} className="table-row-hover">
+                            <tr key={bill.id} className="hover:bg-gray-50 transition-colors">
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{formatDateDMY(bill.date)}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{bill.bill_number}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{bill.bill_number || 'N/A'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">₹{bill.amount}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{formatDateDMY(bill.due_date || bill.date)}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                                    <span className={`status-badge ${bill.status.toLowerCase() === 'paid' ? 'status-paid' : 'status-unpaid'}`}>
+                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                      bill.status.toLowerCase() === 'paid' 
+                                        ? 'bg-green-100 text-green-700' 
+                                        : 'bg-yellow-100 text-yellow-700'
+                                    }`}>
                                         {bill.status}
                                     </span>
                       </td>
@@ -806,7 +929,7 @@ const handleExport = () => {
                     Processing...
                   </>
                 ) : (
-                  `Pay ₹${prevMonthBillAmount}`
+                  `Pay ₹${currentBillAmount.toFixed(2)}`
                 )}
               </button>
             </div>
