@@ -503,29 +503,41 @@ export default function Dashboard() {
 
   // Calculate current date water usage and amount from flow_data
 
-  // Calculate current date usage by summing liters for the most recent date
-  const mostRecentData = cleanedUsageData.length > 0 ? cleanedUsageData[cleanedUsageData.length - 1] : null;
-  const mostRecentDate = mostRecentData ? new Date(mostRecentData.created_at) : null;
-
+  // Calculate current date usage by summing liters for TODAY only
   const currentDateUsage = cleanedUsageData
       .filter(d => {
-      if (!mostRecentDate) return false;
-      const dt = new Date(d.created_at);
-      return dt.getDate() === mostRecentDate.getDate() && 
-             dt.getMonth() === mostRecentDate.getMonth() && 
-             dt.getFullYear() === mostRecentDate.getFullYear();
+        const dt = new Date(d.created_at);
+        return dt.getDate() === today.getDate() && 
+               dt.getMonth() === today.getMonth() && 
+               dt.getFullYear() === today.getFullYear();
       })
     .reduce((sum, d) => sum + (d.liters || 0), 0);
 
-  // Calculate bill amount based on usage (₹10 per liter)
-  const currentDateAmount = (currentDateUsage * 10).toFixed(2);
+  // Calculate current bill amount - include current month usage + any unpaid previous bills
+  const currentMonthUsage = cleanedUsageData
+      .filter(d => {
+        const dt = new Date(d.created_at);
+        return dt.getMonth() === thisMonth && 
+               dt.getFullYear() === thisYear;
+      })
+    .reduce((sum, d) => sum + (d.liters || 0), 0);
+
+  // Get unpaid previous bills
+  const unpaidPreviousBills = previousBills
+    .filter(bill => bill.status !== 'Paid')
+    .reduce((sum, bill) => sum + parseFloat(bill.amount), 0);
+
+  // Current bill = current month usage + unpaid previous bills
+  const currentBillAmount = ((currentMonthUsage / 1000) * 4.5) + unpaidPreviousBills;
   
   console.log('Current date usage calculation:', {
-    mostRecentDate: mostRecentDate ? mostRecentDate.toISOString() : 'No data',
+    today: today.toISOString(),
     totalDataPoints: cleanedUsageData.length,
     sampleDates: cleanedUsageData.slice(0, 3).map(d => d.created_at),
     currentDateUsage,
-    currentDateAmount
+    currentMonthUsage,
+    unpaidPreviousBills,
+    currentBillAmount
   });
 
   // Get water level from flow_data table
@@ -569,7 +581,7 @@ export default function Dashboard() {
         transition: 'background 1s cubic-bezier(.4,0,.2,1)',
       }}
     >
-      <header className="w-full px-0 py-6 flex justify-center">
+      <header className="w-full px-0 py-4 md:py-6 flex justify-center">
         <motion.div
           initial={{ opacity: 0, y: -30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -580,20 +592,20 @@ export default function Dashboard() {
             <span className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-white/60 shadow-lg backdrop-blur-md">
               <Droplets size={32} className="text-primary" />
             </span>
-            <span className="text-3xl font-pacifico text-primary tracking-tight select-none">AquaBill</span>
+            <span className="text-2xl md:text-3xl font-pacifico text-primary tracking-tight select-none">AquaBill</span>
           </div>
-          <nav className="flex-1 flex justify-center">
-            <div className="flex gap-2 bg-white/60 backdrop-blur-md rounded-full px-2 py-1 shadow-lg">
-              <Link to="/dashboard" className="flex items-center gap-1 px-6 py-2 text-primary bg-blue-50 rounded-full font-medium transition-colors"><i className="ri-dashboard-line" /><span>Dashboard</span></Link>
-              <Link to="/billing" className="flex items-center gap-1 px-6 py-2 text-gray-600 hover:text-primary hover:bg-blue-50 rounded-full font-medium transition-colors"><i className="ri-bill-line" /><span>Billing</span></Link>
-              <Link to="/support" className="flex items-center gap-1 px-6 py-2 text-gray-600 hover:text-primary hover:bg-blue-50 rounded-full font-medium transition-colors"><i className="ri-customer-service-line" /><span>Support</span></Link>
+          <nav className="flex-1 flex justify-center px-2">
+            <div className="flex gap-2 bg-white/60 backdrop-blur-md rounded-full px-2 py-1 shadow-lg overflow-x-auto no-scrollbar whitespace-nowrap max-w-full">
+              <Link to="/dashboard" className="flex items-center gap-1 px-4 md:px-6 py-2 text-primary bg-blue-50 rounded-full font-medium transition-colors"><i className="ri-dashboard-line" /><span>Dashboard</span></Link>
+              <Link to="/billing" className="flex items-center gap-1 px-4 md:px-6 py-2 text-gray-600 hover:text-primary hover:bg-blue-50 rounded-full font-medium transition-colors"><i className="ri-bill-line" /><span>Billing</span></Link>
+              <Link to="/support" className="flex items-center gap-1 px-4 md:px-6 py-2 text-gray-600 hover:text-primary hover:bg-blue-50 rounded-full font-medium transition-colors"><i className="ri-customer-service-line" /><span>Support</span></Link>
             </div>
           </nav>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4 md:gap-6">
             <div className="flex items-center bg-white/60 rounded-full px-2 py-2 shadow backdrop-blur-md">
               <Link to="/profile">
                 <span 
-                  className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center relative overflow-hidden"
+                  className="w-10 h-10 md:w-14 md:h-14 rounded-full bg-blue-100 flex items-center justify-center relative overflow-hidden"
                   style={{
                     backgroundImage: profilePhotoUrl ? `url(${profilePhotoUrl})` : 'url(/background.jpg)',
                     backgroundSize: 'cover',
@@ -660,7 +672,7 @@ export default function Dashboard() {
                 <div>
                   <p className="text-gray-500 text-sm">Current Bill</p>
                   <h3 className="text-3xl font-bold text-gray-800 mt-1">
-                    ₹{loading ? '...' : currentDateAmount}
+                    ₹{loading ? '...' : currentBillAmount.toFixed(2)}
                   </h3>
                 </div>
                 <motion.div
@@ -712,12 +724,12 @@ export default function Dashboard() {
           >
             <div className="flex flex-wrap items-center justify-between mb-6">
               <h3 className="text-xl font-semibold text-gray-800">Water Usage History</h3>
-              <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 md:gap-4">
                 <div className="bg-gray-100 rounded-full p-1">
                   {['daily', 'weekly', 'monthly'].map(p => (
                     <button
                       key={p}
-                      className={`px-4 py-1.5 text-sm rounded-full period-btn ${period === p ? 'bg-white text-primary shadow' : 'text-gray-600'}`}
+                      className={`px-3 md:px-4 py-1.5 text-xs md:text-sm rounded-full period-btn ${period === p ? 'bg-white text-primary shadow' : 'text-gray-600'}`}
                       onClick={() => setPeriod(p)}
                     >
                       {p.charAt(0).toUpperCase() + p.slice(1)}
@@ -725,13 +737,13 @@ export default function Dashboard() {
                   ))}
                 </div>
                 <button
-                  className="px-6 py-2 rounded-full font-medium bg-white text-primary border border-primary hover:bg-primary hover:text-white transition-colors duration-200 whitespace-nowrap"
+                  className="px-4 md:px-6 py-2 rounded-full font-medium bg-white text-primary border border-primary hover:bg-primary hover:text-white transition-colors duration-200 whitespace-nowrap"
                 >
                   <i className="ri-download-line mr-1" /> Export Data
                 </button>
               </div>
             </div>
-            <div className="w-full" style={{ height: '350px' }}>
+            <div className="w-full" style={{ height: '300px', maxHeight: '350px' }}>
               <Line data={chartData} options={chartOptions} style={{ width: '100%', height: '100%' }} />
             </div>
           </motion.div>

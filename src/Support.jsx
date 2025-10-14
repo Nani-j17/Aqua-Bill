@@ -100,25 +100,25 @@ export default function Support() {
   };
   return (
     <div className="min-h-screen w-full flex flex-col" style={{ background: gradient, transition: 'background 1s cubic-bezier(.4,0,.2,1)' }}>
-      <header className="w-full px-0 py-6 flex justify-center">
+      <header className="w-full px-0 py-4 md:py-6 flex justify-center">
         <motion.div initial={{ opacity: 0, y: -30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: 'easeOut' }} className="w-full max-w-5xl flex items-center justify-between px-6 md:px-10">
           <div className="flex items-center gap-3">
             <span className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-white/60 shadow-lg backdrop-blur-md">
               <RiCustomerServiceLine size={32} className="text-primary" />
             </span>
-            <span className="text-3xl font-pacifico text-primary tracking-tight select-none">AquaBill</span>
+            <span className="text-2xl md:text-3xl font-pacifico text-primary tracking-tight select-none">AquaBill</span>
           </div>
-          <nav className="flex-1 flex justify-center">
-            <div className="flex gap-2 bg-white/60 backdrop-blur-md rounded-full px-2 py-1 shadow-lg">
-              <Link to="/dashboard" className={`flex items-center gap-1 px-6 py-2 ${location.pathname === '/dashboard' ? 'text-primary bg-blue-50' : 'text-gray-600 hover:text-primary hover:bg-blue-50'} rounded-full font-medium transition-colors`}><RiDashboardLine /><span>Dashboard</span></Link>
-              <Link to="/billing" className={`flex items-center gap-1 px-6 py-2 ${location.pathname === '/billing' ? 'text-primary bg-blue-50' : 'text-gray-600 hover:text-primary hover:bg-blue-50'} rounded-full font-medium transition-colors`}><RiBillLine /><span>Billing</span></Link>
-              <Link to="/support" className={`flex items-center gap-1 px-6 py-2 ${location.pathname === '/support' ? 'text-primary bg-blue-50' : 'text-gray-600 hover:text-primary hover:bg-blue-50'} rounded-full font-medium transition-colors`}><RiCustomerServiceLine /><span>Support</span></Link>
+          <nav className="flex-1 flex justify-center px-2">
+            <div className="flex gap-2 bg-white/60 backdrop-blur-md rounded-full px-2 py-1 shadow-lg overflow-x-auto no-scrollbar whitespace-nowrap max-w-full">
+              <Link to="/dashboard" className={`flex items-center gap-1 px-4 md:px-6 py-2 ${location.pathname === '/dashboard' ? 'text-primary bg-blue-50' : 'text-gray-600 hover:text-primary hover:bg-blue-50'} rounded-full font-medium transition-colors`}><RiDashboardLine /><span>Dashboard</span></Link>
+              <Link to="/billing" className={`flex items-center gap-1 px-4 md:px-6 py-2 ${location.pathname === '/billing' ? 'text-primary bg-blue-50' : 'text-gray-600 hover:text-primary hover:bg-blue-50'} rounded-full font-medium transition-colors`}><RiBillLine /><span>Billing</span></Link>
+              <Link to="/support" className={`flex items-center gap-1 px-4 md:px-6 py-2 ${location.pathname === '/support' ? 'text-primary bg-blue-50' : 'text-gray-600 hover:text-primary hover:bg-blue-50'} rounded-full font-medium transition-colors`}><RiCustomerServiceLine /><span>Support</span></Link>
             </div>
           </nav>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4 md:gap-6">
             <div className="flex items-center bg-white/60 rounded-full px-2 py-2 shadow backdrop-blur-md">
               <Link to="/profile">
-                <span className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden">
+                <span className="w-10 h-10 md:w-14 md:h-14 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden">
                   {profilePhotoUrl ? (
                     <img src={profilePhotoUrl} alt="Profile" className="object-cover w-full h-full" />
                   ) : (
@@ -133,7 +133,7 @@ export default function Support() {
       <main className="flex-1 w-full flex flex-col items-center px-2 md:px-0">
         <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: 'easeOut' }} className="w-full max-w-5xl mt-6">
           <div className="mb-8">
-            <h2 className="text-3xl font-semibold text-white drop-shadow text-center">Customer Support Center</h2>
+            <h2 className="text-2xl md:text-3xl font-semibold text-white drop-shadow text-center">Customer Support Center</h2>
             <p className="text-gray-100 mt-1 text-center">Get the help you need, when you need it</p>
           </div>
           <div className="flex flex-col gap-8 mb-8">
@@ -147,7 +147,7 @@ export default function Support() {
                 </div>
               </motion.div>
               <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} whileHover={{ scale: 1.03, boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.15)', borderColor: '#3b82f6' }} transition={{ delay: 0.2, duration: 0.5, type: 'spring' }} className="bg-white/40 backdrop-blur-lg p-8 rounded-2xl shadow-lg border border-white/30 hover:border-blue-400 transition-all duration-300 cursor-pointer max-w-2xl mx-auto">
-                <div className="text-xl font-semibold mb-4 text-gray-800">Submit a Support Request</div>
+                 <div className="text-lg md:text-xl font-semibold mb-4 text-gray-800">Submit a Support Request</div>
                 <form className="flex flex-col gap-4" onSubmit={async (e) => { 
                   e.preventDefault(); 
                   if (!user) {
@@ -197,7 +197,7 @@ export default function Support() {
                     setShowErrorPopup(true);
                   }
                 }}>
-                  <div className="flex flex-col md:flex-row gap-4">
+                  <div className="flex flex-col md:flex-row gap-3 md:gap-4">
                     <input className="bg-gray-100 border border-gray-300 rounded-lg px-4 py-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 flex-1" placeholder="Name*" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
                     <input 
                       className="bg-gray-100 border border-gray-300 rounded-lg px-4 py-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 flex-1" 
@@ -224,7 +224,7 @@ export default function Support() {
                       required 
                     />
                   </div>
-                  <div className="flex flex-col md:flex-row gap-4">
+                   <div className="flex flex-col md:flex-row gap-3 md:gap-4">
                     <select className="bg-gray-100 border border-gray-300 rounded-lg px-4 py-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 flex-1" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
                       <option>Billing & Payments</option>
                       <option>Technical Issue</option>
@@ -241,7 +241,7 @@ export default function Support() {
               </motion.div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} whileHover={{ scale: 1.03, boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.15)', borderColor: '#3b82f6' }} transition={{ delay: 0.2, duration: 0.5, type: 'spring' }} className="bg-white/40 backdrop-blur-lg p-8 rounded-2xl shadow-lg border border-white/30 md:col-span-2 overflow-x-auto min-h-0 cursor-pointer hover:border-blue-400 transition-all duration-300">
+              <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} whileHover={{ scale: 1.03, boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.15)', borderColor: '#3b82f6' }} transition={{ delay: 0.2, duration: 0.5, type: 'spring' }} className="bg-white/40 backdrop-blur-lg p-6 md:p-8 rounded-2xl shadow-lg border border-white/30 md:col-span-2 overflow-x-auto min-h-0 cursor-pointer hover:border-blue-400 transition-all duration-300">
                 <div className="mb-8">
                   <div className="text-xl font-semibold mb-4 text-gray-800">Frequently Asked Questions</div>
                   <div className="divide-y divide-gray-200">
@@ -266,7 +266,7 @@ export default function Support() {
                   </div>
                 </div>
               </motion.div>
-              <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} whileHover={{ scale: 1.03, boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.15)', borderColor: '#3b82f6' }} transition={{ delay: 0.3, duration: 0.5, type: 'spring' }} className="bg-white/40 backdrop-blur-lg p-8 rounded-2xl shadow-lg border border-white/30 flex flex-col gap-8 min-w-[380px] max-w-[600px] w-full break-words cursor-pointer hover:border-blue-400 transition-all duration-300">
+              <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} whileHover={{ scale: 1.03, boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.15)', borderColor: '#3b82f6' }} transition={{ delay: 0.3, duration: 0.5, type: 'spring' }} className="bg-white/40 backdrop-blur-lg p-6 md:p-8 rounded-2xl shadow-lg border border-white/30 flex flex-col gap-6 md:gap-8 min-w-0 sm:min-w-[380px] max-w-full md:max-w-[600px] w-full break-words cursor-pointer hover:border-blue-400 transition-all duration-300">
                 <div>
                   <div className="text-xl font-semibold mb-4 text-gray-800">Contact Information</div>
                   <div className="flex flex-col gap-2 text-gray-700 text-base">

@@ -400,25 +400,25 @@ const handleExport = () => {
 
   return (
     <div className="min-h-screen w-full flex flex-col" style={{ background: gradient, transition: 'background 1s cubic-bezier(.4,0,.2,1)' }}>
-      <header className="w-full px-0 py-6 flex justify-center">
-        <motion.div initial={{ opacity: 0, y: -30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: 'easeOut' }} className="w-full max-w-5xl flex items-center justify-between px-6 md:px-10">
+      <header className="w-full px-0 py-4 md:py-6 flex justify-center">
+        <motion.div initial={{ opacity: 0, y: -30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: 'easeOut' }} className="w-full max-w-5xl flex items-center justify-between px-4 md:px-10">
           <div className="flex items-center gap-3">
             <span className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-white/60 shadow-lg backdrop-blur-md">
               <RiBillLine size={32} className="text-primary" />
             </span>
-            <span className="text-3xl font-pacifico text-primary tracking-tight select-none">AquaBill</span>
+            <span className="text-2xl md:text-3xl font-pacifico text-primary tracking-tight select-none">AquaBill</span>
           </div>
-          <nav className="flex-1 flex justify-center">
-            <div className="flex gap-2 bg-white/60 backdrop-blur-md rounded-full px-2 py-1 shadow-lg">
-              <Link to="/dashboard" className="flex items-center gap-1 px-6 py-2 text-gray-600 hover:text-primary hover:bg-blue-50 rounded-full font-medium transition-colors"><RiDashboardLine /><span>Dashboard</span></Link>
-              <Link to="/billing" className="flex items-center gap-1 px-6 py-2 text-primary bg-blue-50 rounded-full font-medium transition-colors"><RiBillLine /><span>Billing</span></Link>
-              <Link to="/support" className="flex items-center gap-1 px-6 py-2 text-gray-600 hover:text-primary hover:bg-blue-50 rounded-full font-medium transition-colors"><RiCustomerServiceLine /><span>Support</span></Link>
+          <nav className="flex-1 flex justify-center px-2">
+            <div className="flex gap-2 bg-white/60 backdrop-blur-md rounded-full px-2 py-1 shadow-lg overflow-x-auto no-scrollbar whitespace-nowrap max-w-full">
+              <Link to="/dashboard" className="flex items-center gap-1 px-4 md:px-6 py-2 text-gray-600 hover:text-primary hover:bg-blue-50 rounded-full font-medium transition-colors"><RiDashboardLine /><span>Dashboard</span></Link>
+              <Link to="/billing" className="flex items-center gap-1 px-4 md:px-6 py-2 text-primary bg-blue-50 rounded-full font-medium transition-colors"><RiBillLine /><span>Billing</span></Link>
+              <Link to="/support" className="flex items-center gap-1 px-4 md:px-6 py-2 text-gray-600 hover:text-primary hover:bg-blue-50 rounded-full font-medium transition-colors"><RiCustomerServiceLine /><span>Support</span></Link>
             </div>
           </nav>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4 md:gap-6">
             <div className="flex items-center bg-white/60 rounded-full px-2 py-2 shadow backdrop-blur-md">
               <Link to="/profile">
-                <span className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden">
+                <span className="w-9 h-9 md:w-14 md:h-14 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden">
                   {profilePhotoUrl ? (
                     <img src={profilePhotoUrl} alt="Profile" className="object-cover w-full h-full" />
                   ) : (
@@ -433,7 +433,7 @@ const handleExport = () => {
       <main className="flex-1 w-full flex flex-col items-center px-2 md:px-0">
         <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: 'easeOut' }} className="w-full max-w-5xl mt-6">
           <div className="mb-8">
-            <h2 className="text-3xl font-semibold text-white drop-shadow">Billing & Payments</h2>
+            <h2 className="text-2xl md:text-3xl font-semibold text-white drop-shadow">Billing & Payments</h2>
             <p className="text-gray-100 mt-1">Manage your bills, view payment history, and make payments</p>
             
             {paymentSuccess && (
@@ -452,14 +452,14 @@ const handleExport = () => {
               </motion.div>
             )}
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 mb-8">
             <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} whileHover={{ scale: 1.03, boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.15)', borderColor: '#3b82f6' }} transition={{ delay: 0.1, duration: 0.5, type: 'spring' }} className="bg-white/40 backdrop-blur-lg p-6 rounded-2xl shadow-lg border border-white/30 hover:border-primary transition-all duration-300 cursor-pointer lg:col-span-2">
-              <div className="flex flex-col md:flex-row md:items-center justify-between">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                 <div>
                                       <p className="text-gray-500 text-sm">Previous Month Usage</p>
                   <div className="flex items-baseline">
-                      <h3 className="text-4xl font-bold text-gray-800 mt-1">₹{prevMonthBillAmount}</h3>
-                      <span className="ml-2 text-gray-500">({prevMonthUsage.toFixed(2)} liters)</span>
+                      <h3 className="text-3xl md:text-4xl font-bold text-gray-800 mt-1">₹{prevMonthBillAmount}</h3>
+                      <span className="md:ml-2 text-gray-500">({prevMonthUsage.toFixed(2)} liters)</span>
                   </div>
                     <p className="text-gray-500 text-sm mt-1">Due on <span className="font-medium text-gray-700">{dueDateStr}</span></p>
                   <div className="mt-1 flex items-center">
@@ -469,7 +469,7 @@ const handleExport = () => {
                 <div className="mt-4 md:mt-0">
                   <button
                     onClick={() => setShowPaymentPopup(true)}
-                    className="px-6 py-2 rounded-full font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors duration-200 flex items-center gap-2 whitespace-nowrap"
+                    className="px-5 py-2 rounded-full font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors duration-200 flex items-center gap-2 whitespace-nowrap"
                   >
                     <RiBankCardLine className="mr-2" /> Make Payment
                   </button>
@@ -566,7 +566,7 @@ const handleExport = () => {
             </motion.div>
           </div>
           <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.7 }} className="bg-white/40 backdrop-blur-lg p-6 rounded-2xl shadow-lg border border-white/30 mb-8">
-            <div className="flex flex-col md:flex-row md:items-center justify-between mb-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-3">
               <h3 className="text-xl font-semibold text-gray-800">Billing History</h3>
               <div className="flex flex-wrap items-center gap-3 mt-4 md:mt-0">
                 <div className="relative">
@@ -590,7 +590,7 @@ const handleExport = () => {
                       <RiArrowDownSLine />
                   </div>
                 </div>
-                <div className="relative flex-grow md:max-w-xs">
+                <div className="relative flex-grow md:max-w-xs w-full">
                     <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} type="text" className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Search bills..." />
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <RiSearchLine className="text-gray-400" />
@@ -635,7 +635,7 @@ const handleExport = () => {
                 </tbody>
               </table>
             </div>
-            <div className="mt-6 flex items-center justify-between">
+            <div className="mt-6 flex flex-col sm:flex-row gap-3 sm:gap-0 items-center justify-between">
                 <div className="text-sm text-gray-500">
                     {filteredBills.length === 0 ? (
                         "No results found"
@@ -698,7 +698,7 @@ const handleExport = () => {
       </div>
     </div>
                 </div>
-  <div className="relative w-full" style={{ height: '350px' }}>
+  <div className="relative w-full" style={{ height: '300px', maxHeight: '350px' }}>
     <Line data={chartJsData} options={chartJsOptions} style={{ width: '100%', height: '100%' }} />
             </div>
           </motion.div>

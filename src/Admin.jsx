@@ -318,12 +318,12 @@ export default function Admin() {
 
   return (
     <div className="min-h-screen w-full flex flex-col" style={{ background: gradient, transition: 'background 1s cubic-bezier(.4,0,.2,1)' }}>
-      <header className="w-full px-0 py-6 flex justify-center">
+      <header className="w-full px-0 py-4 md:py-6 flex justify-center">
         <motion.div 
           initial={{ opacity: 0, y: -30 }} 
           animate={{ opacity: 1, y: 0 }} 
           transition={{ duration: 0.7, ease: 'easeOut' }} 
-          className="w-full max-w-7xl flex items-center justify-between px-6 md:px-10"
+          className="w-full max-w-7xl flex items-center justify-between px-4 md:px-10"
         >
           <div className="flex items-center gap-3">
             <span className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-white/60 shadow-lg backdrop-blur-md">
@@ -332,12 +332,12 @@ export default function Admin() {
             <span className="text-3xl font-pacifico text-primary tracking-tight select-none">AquaBill Admin</span>
           </div>
 
-          <button
+            <button
             onClick={async () => {
               await supabase.auth.signOut();
               navigate('/');
             }}
-            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+            className="bg-red-500 hover:bg-red-600 text-white px-3 md:px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
           >
             Logout
           </button>
@@ -352,7 +352,7 @@ export default function Admin() {
           className="w-full max-w-7xl mt-6"
         >
           <div className="mb-8">
-            <h2 className="text-3xl font-semibold text-white drop-shadow text-center">Support Request Management</h2>
+            <h2 className="text-2xl md:text-3xl font-semibold text-white drop-shadow text-center">Support Request Management</h2>
             <p className="text-gray-100 mt-1 text-center">Manage and respond to customer support requests</p>
           </div>
 
@@ -392,16 +392,16 @@ export default function Admin() {
             initial={{ opacity: 0, y: 20 }} 
             animate={{ opacity: 1, y: 0 }} 
             transition={{ delay: 0.6 }}
-            className="bg-white/40 backdrop-blur-lg p-6 rounded-2xl shadow-lg border border-white/30 mb-8"
+            className="bg-white/40 backdrop-blur-lg p-4 md:p-6 rounded-2xl shadow-lg border border-white/30 mb-8"
           >
-            <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-              <div className="flex items-center gap-4">
+            <div className="flex flex-col md:flex-row gap-4 md:gap-6 items-stretch md:items-center justify-between">
+              <div className="flex items-center gap-3 w-full md:w-auto">
                 <div className="flex items-center gap-2">
                   <RiFilterLine className="text-white" />
                   <select 
                     value={filter} 
                     onChange={(e) => setFilter(e.target.value)}
-                    className="bg-white/80 rounded-lg px-4 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    className="bg-white/80 rounded-lg px-3 md:px-4 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 w-full md:w-auto"
                   >
                     <option value="all">All Requests</option>
                     <option value="New">New Requests</option>
@@ -409,19 +409,19 @@ export default function Admin() {
                   </select>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 w-full md:w-auto">
                 <RiSearchLine className="text-white" />
                 <input 
                   type="text"
                   placeholder="Search requests..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="bg-white/80 rounded-lg px-4 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 w-64"
+                  className="bg-white/80 rounded-lg px-3 md:px-4 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 w-full md:w-64"
                 />
               </div>
               <button 
                 onClick={fetchSupportRequests}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 w-full md:w-auto justify-center"
               >
                 <RiRefreshLine />
                 Refresh
@@ -448,8 +448,73 @@ export default function Admin() {
                 <p className="text-gray-200">When users submit requests, they'll appear here</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
+              <div>
+                {/* Mobile Cards */}
+                <div className="md:hidden divide-y divide-white/20">
+                  {filteredRequests.map((request, index) => (
+                    <motion.div
+                      key={request.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      className="p-4 flex flex-col gap-3 hover:bg-white/10 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center shadow-lg">
+                          {request.profiles?.profile_photo_url ? (
+                            <img src={request.profiles.profile_photo_url} alt="Profile" className="w-full h-full rounded-full object-cover border-2 border-white" />
+                          ) : (
+                            <RiUserLine className="text-white text-lg" />
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-semibold text-white">{request.name}</div>
+                          <div className="text-xs text-gray-200">{formatDate(request.created_at)}</div>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium border ${
+                          request.status === 'New'
+                            ? 'bg-red-500/20 text-red-200 border-red-400'
+                            : request.status === 'Resolved'
+                            ? 'bg-green-500/20 text-green-200 border-green-400'
+                            : 'bg-gray-500/20 text-gray-200 border-gray-400'
+                        }`}>
+                          {request.status}
+                        </span>
+                      </div>
+                      <div className="text-white text-sm">
+                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow mr-2">{request.category}</span>
+                        {request.message.length > 80 ? `${request.message.substring(0, 80)}...` : request.message}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={async () => {
+                            setSelectedRequest(request);
+                            await fetchPreviousResponses(request.id);
+                          }}
+                          className="flex-1 p-2 bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 hover:text-blue-200 rounded-lg transition-all duration-300 border border-blue-400/30"
+                        >
+                          View Details
+                        </motion.button>
+                        {request.status === 'New' && (
+                          <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => updateRequestStatus(request.id, 'Resolved')}
+                            className="p-2 bg-green-500/20 hover:bg-green-500/40 text-green-300 hover:text-green-200 rounded-lg transition-all duration-300 border border-green-400/30"
+                          >
+                            Mark Resolved
+                          </motion.button>
+                        )}
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+
+                {/* Desktop Table */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full">
                   <thead className="bg-white/20">
                     <tr>
                       <th className="px-6 py-4 text-left text-white font-semibold">User</th>
@@ -548,7 +613,8 @@ export default function Admin() {
                       </motion.tr>
                     ))}
                   </tbody>
-                </table>
+                  </table>
+                </div>
               </div>
             )}
           </motion.div>

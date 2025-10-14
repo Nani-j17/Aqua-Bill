@@ -439,25 +439,25 @@ export default function Profile() {
 
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center" style={{ background: gradient, transition: 'background 1s cubic-bezier(.4,0,.2,1)' }}>
-      <header className="w-full px-0 py-6 flex justify-center">
+      <header className="w-full px-0 py-4 md:py-6 flex justify-center">
         <motion.div initial={{ opacity: 0, y: -30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: 'easeOut' }} className="w-full max-w-5xl flex items-center justify-between px-6 md:px-10">
           <div className="flex items-center gap-3">
             <span className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-white/60 shadow-lg backdrop-blur-md">
               <Droplets size={32} className="text-primary" />
             </span>
-            <span className="text-3xl font-pacifico text-primary tracking-tight select-none">AquaBill</span>
+            <span className="text-2xl md:text-3xl font-pacifico text-primary tracking-tight select-none">AquaBill</span>
           </div>
-          <nav className="flex-1 flex justify-center">
-            <div className="flex gap-2 bg-white/60 backdrop-blur-md rounded-full px-2 py-1 shadow-lg">
-              <Link to="/dashboard" className={`flex items-center gap-1 px-6 py-2 ${location.pathname === '/dashboard' ? 'text-primary bg-blue-50' : 'text-gray-600 hover:text-primary hover:bg-blue-50'} rounded-full font-medium transition-colors`}><i className="ri-dashboard-line" /><span>Dashboard</span></Link>
-              <Link to="/billing" className={`flex items-center gap-1 px-6 py-2 ${location.pathname === '/billing' ? 'text-primary bg-blue-50' : 'text-gray-600 hover:text-primary hover:bg-blue-50'} rounded-full font-medium transition-colors`}><i className="ri-bill-line" /><span>Billing</span></Link>
-              <Link to="/support" className={`flex items-center gap-1 px-6 py-2 ${location.pathname === '/support' ? 'text-primary bg-blue-50' : 'text-gray-600 hover:text-primary hover:bg-blue-50'} rounded-full font-medium transition-colors`}><i className="ri-customer-service-line" /><span>Support</span></Link>
+          <nav className="flex-1 flex justify-center px-2">
+            <div className="flex gap-2 bg-white/60 backdrop-blur-md rounded-full px-2 py-1 shadow-lg overflow-x-auto no-scrollbar whitespace-nowrap max-w-full">
+              <Link to="/dashboard" className={`flex items-center gap-1 px-4 md:px-6 py-2 ${location.pathname === '/dashboard' ? 'text-primary bg-blue-50' : 'text-gray-600 hover:text-primary hover:bg-blue-50'} rounded-full font-medium transition-colors`}><i className="ri-dashboard-line" /><span>Dashboard</span></Link>
+              <Link to="/billing" className={`flex items-center gap-1 px-4 md:px-6 py-2 ${location.pathname === '/billing' ? 'text-primary bg-blue-50' : 'text-gray-600 hover:text-primary hover:bg-blue-50'} rounded-full font-medium transition-colors`}><i className="ri-bill-line" /><span>Billing</span></Link>
+              <Link to="/support" className={`flex items-center gap-1 px-4 md:px-6 py-2 ${location.pathname === '/support' ? 'text-primary bg-blue-50' : 'text-gray-600 hover:text-primary hover:bg-blue-50'} rounded-full font-medium transition-colors`}><i className="ri-customer-service-line" /><span>Support</span></Link>
             </div>
           </nav>
           <div className="flex items-center gap-6">
             <div className="flex items-center bg-white/60 rounded-full px-2 py-2 shadow backdrop-blur-md">
               <Link to="/profile">
-                <span className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden">
+                <span className="w-10 h-10 md:w-14 md:h-14 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden">
                   {picPreview ? (
                     <img src={picPreview} alt="Profile" className="object-cover w-full h-full" />
                   ) : (
@@ -478,9 +478,9 @@ export default function Profile() {
         ) : (
           <motion.div initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.7, type: 'spring' }} className="bg-white/30 backdrop-blur-lg rounded-3xl shadow-2xl border border-white/40 p-0 flex flex-col items-center relative overflow-hidden">
             {/* Profile Picture */}
-            <motion.div initial={{ y: -30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.7, type: 'spring' }} className="w-full flex flex-col items-center pt-10 pb-4 bg-gradient-to-r from-blue-400/40 to-fuchsia-400/40">
+            <motion.div initial={{ y: -30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.7, type: 'spring' }} className="w-full flex flex-col items-center pt-8 md:pt-10 pb-4 bg-gradient-to-r from-blue-400/40 to-fuchsia-400/40">
               <div className="relative">
-                <motion.div whileHover={editMode ? { scale: 1.08, boxShadow: '0 0 0 8px #f472b633' } : {}} animate={editMode ? { scale: [1, 1.04, 1], boxShadow: ['0 0 0 0px #f472b633', '0 0 0 12px #f472b633', '0 0 0 0px #f472b633'] } : {}} transition={editMode ? { repeat: Infinity, duration: 1.6, ease: 'easeInOut' } : {}} className="w-36 h-36 rounded-full bg-gradient-to-br from-blue-400 to-fuchsia-400 shadow-lg flex items-center justify-center overflow-hidden border-4 border-white">
+                <motion.div whileHover={editMode ? { scale: 1.08, boxShadow: '0 0 0 8px #f472b633' } : {}} animate={editMode ? { scale: [1, 1.04, 1], boxShadow: ['0 0 0 0px #f472b633', '0 0 0 12px #f472b633', '0 0 0 0px #f472b633'] } : {}} transition={editMode ? { repeat: Infinity, duration: 1.6, ease: 'easeInOut' } : {}} className="w-28 h-28 md:w-36 md:h-36 rounded-full bg-gradient-to-br from-blue-400 to-fuchsia-400 shadow-lg flex items-center justify-center overflow-hidden border-4 border-white">
                   {picPreview ? (
                     <img src={picPreview} alt="Profile" className="object-cover w-full h-full" />
                   ) : (
