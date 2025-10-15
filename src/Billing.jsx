@@ -146,11 +146,11 @@ export default function Billing() {
     .filter(bill => bill.status !== 'Paid')
     .reduce((sum, bill) => sum + parseFloat(bill.amount), 0);
 
-  // Current bill = current month usage + unpaid previous bills
-  const currentBillAmount = ((currentMonthUsage / 1000) * 4.5) + unpaidPreviousBills;
+  // Current bill = current month usage (in liters) * 4.5 + unpaid previous bills
+  const currentBillAmount = (currentMonthUsage * 4.5) + unpaidPreviousBills;
   
   // Previous month bill amount for display
-  const prevMonthBillAmount = ((prevMonthUsage / 1000) * 4.5).toFixed(2);
+  const prevMonthBillAmount = (prevMonthUsage * 4.5).toFixed(2);
 
   const prevMonthData = chartData.filter(d => {
     const dt = new Date(d.created_at);
@@ -168,7 +168,7 @@ export default function Billing() {
     return {
       day,
       usage: usage,
-      amount: +(usage * 10).toFixed(2)
+      amount: +(usage * 4.5).toFixed(2)
     };
   });
 
@@ -239,7 +239,7 @@ export default function Billing() {
 
   const generateMissingBills = async (currentMonth, currentYear, currentMonthUsage) => {
     // Generate current month bill
-    const currentAmount = ((currentMonthUsage / 1000) * 4.5).toFixed(2);
+    const currentAmount = (currentMonthUsage * 4.5).toFixed(2);
     const currentDueDate = new Date(currentYear, currentMonth + 1, 1).toISOString().slice(0, 10);
     const currentBillNumber = `AB${currentYear}${(currentMonth + 1).toString().padStart(2, '0')}${user.id.substring(0, 4).toUpperCase()}`;
     
@@ -277,7 +277,7 @@ export default function Billing() {
           .reduce((sum, d) => sum + (d.liters || 0), 0);
         
         if (monthUsage > 0) {
-          const amount = ((monthUsage / 1000) * 4.5).toFixed(2);
+          const amount = (monthUsage * 4.5).toFixed(2);
           const dueDate = new Date(checkYear, adjustedMonth + 1, 1).toISOString().slice(0, 10);
           const billNumber = `AB${checkYear}${(adjustedMonth + 1).toString().padStart(2, '0')}${user.id.substring(0, 4).toUpperCase()}`;
           const billDate = new Date(checkYear, adjustedMonth, 1).toISOString().slice(0, 10);

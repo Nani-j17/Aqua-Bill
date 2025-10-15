@@ -275,7 +275,7 @@ export default function Dashboard() {
           })
           .reduce((sum, d) => sum + (d.total_liters || 0), 0);
         
-        const amount = ((currentMonthTotal / 1000) * 4.5).toFixed(2);
+        const amount = ((currentMonthTotal) * 4.5).toFixed(2);
         const dueDate = new Date(today.getFullYear(), today.getMonth() + 1, 1).toISOString().slice(0, 10);
         // 3. Insert new bill
         await supabase.from('bills').insert([{
@@ -528,8 +528,8 @@ export default function Dashboard() {
     .filter(bill => bill.status !== 'Paid')
     .reduce((sum, bill) => sum + parseFloat(bill.amount), 0);
 
-  // Current bill = current month usage + unpaid previous bills
-  const currentBillAmount = ((currentMonthUsage / 1000) * 4.5) + unpaidPreviousBills;
+  // Current bill = current month usage (in liters) * rate + unpaid previous bills
+  const currentBillAmount = (currentMonthUsage * 4.5) + unpaidPreviousBills;
   
   console.log('Current date usage calculation:', {
     today: today.toISOString(),
