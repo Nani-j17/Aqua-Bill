@@ -36,14 +36,24 @@ class RazorpayService {
   // Create payment order
   async createOrder(amount, currency = 'INR') {
     try {
+      // Validate amount
+      if (!amount || amount <= 0) {
+        throw new Error('Invalid payment amount');
+      }
+      
+      // Minimum amount check (₹1)
+      if (amount < 1) {
+        throw new Error('Minimum payment amount is ₹1');
+      }
+      
       const orderId = this.generateOrderId();
       
       const options = {
         key: this.config.KEY_ID,
-        amount: amount * 100, // Razorpay expects amount in paise
+        amount: Math.round(amount * 100), // Razorpay expects amount in paise
         currency: currency,
         name: this.config.NAME,
-        description: this.config.DESCRIPTION,
+        description: `${this.config.DESCRIPTION} - ₹${amount.toFixed(2)}`,
         order_id: orderId,
         prefill: {
           name: 'User Name',
@@ -57,6 +67,15 @@ class RazorpayService {
           ondismiss: () => {
             console.log('Payment cancelled by user');
           }
+        },
+        retry: {
+          enabled: true,
+          max_count: 3
+        },
+        callback_url: window.location.origin + '/billing',
+        notes: {
+          payment_for: 'water_bill',
+          amount: amount.toString()
         }
       };
 
@@ -70,6 +89,11 @@ class RazorpayService {
   // Initialize payment
   async initiatePayment(amount, userDetails = {}) {
     try {
+      // Validate inputs
+      if (!amount || amount <= 0) {
+        throw new Error('Invalid payment amount');
+      }
+
       const Razorpay = await this.loadScript();
       
       const orderResult = await this.createOrder(amount);
@@ -85,36 +109,50 @@ class RazorpayService {
       if (userDetails.contact) options.prefill.contact = userDetails.contact;
 
       return new Promise((resolve, reject) => {
-        const razorpayInstance = new Razorpay({
-          ...options,
-          handler: async (response) => {
-            try {
-              console.log('Payment successful:', response);
-              // Save payment record
-              await this.savePaymentRecord(response, {
-                paymentId: response.razorpay_payment_id,
-                orderId: response.razorpay_order_id,
-                signature: response.razorpay_signature
-              });
-              resolve({ success: true, data: response });
-            } catch (error) {
-              console.error('Error handling payment success:', error);
-              resolve({ success: true, data: response }); // Still resolve as success even if save fails
+        try {
+          const razorpayInstance = new Razorpay({
+            ...options,
+            handler: async (response) => {
+              try {
+                console.log('Payment successful:', response);
+                
+                // Update bill status in database
+                await this.updateBillStatus(amount);
+                
+                // Save payment record
+                await this.savePaymentRecord(response, {
+                  paymentId: response.razorpay_payment_id,
+                  orderId: response.razorpay_order_id,
+                  signature: response.razorpay_signature
+                });
+                
+                resolve({ success: true, data: response });
+              } catch (error) {
+                console.error('Error handling payment success:', error);
+                resolve({ success: true, data: response }); // Still resolve as success even if save fails
+              }
             }
-          }
-        });
-        
-        razorpayInstance.on('payment.failed', (response) => {
-          console.error('Payment failed:', response);
-          reject(new Error(response.error?.description || 'Payment failed'));
-        });
+          });
+          
+          razorpayInstance.on('payment.failed', (response) => {
+            console.error('Payment failed:', response);
+            const errorMessage = response.error?.description || 
+                               response.error?.reason || 
+                               'Payment failed due to technical issues';
+            reject(new Error(errorMessage));
+          });
 
-        razorpayInstance.on('payment.cancelled', (response) => {
-          console.log('Payment cancelled:', response);
-          reject(new Error('Payment was cancelled by user'));
-        });
+          razorpayInstance.on('payment.cancelled', (response) => {
+            console.log('Payment cancelled:', response);
+            reject(new Error('Payment was cancelled'));
+          });
 
-        razorpayInstance.open();
+          // Open payment modal
+          razorpayInstance.open();
+        } catch (error) {
+          console.error('Error creating Razorpay instance:', error);
+          reject(new Error('Failed to initialize payment gateway'));
+        }
       });
     } catch (error) {
       console.error('Razorpay payment initiation error:', error);
@@ -160,10 +198,62 @@ class RazorpayService {
     }
   }
 
+  // Update bill status after successful payment
+  async updateBillStatus(amount) {
+    try {
+      const { supabase } = await import('../supabaseClient');
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        console.error('No authenticated user found');
+        return;
+      }
+
+      // Find unpaid bills for this user and mark them as paid
+      const { data: bills, error: billsError } = await supabase
+        .from('bills')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'Unpaid')
+        .order('date', { ascending: false });
+
+      if (billsError) {
+        console.error('Error fetching bills:', billsError);
+        return;
+      }
+
+      // Calculate total unpaid amount
+      const totalUnpaid = bills.reduce((sum, bill) => sum + parseFloat(bill.amount), 0);
+      
+      // If payment amount matches or exceeds total unpaid, mark all as paid
+      if (amount >= totalUnpaid) {
+        const { error: updateError } = await supabase
+          .from('bills')
+          .update({ status: 'Paid' })
+          .eq('user_id', user.id)
+          .eq('status', 'Unpaid');
+
+        if (updateError) {
+          console.error('Error updating bill status:', updateError);
+        } else {
+          console.log('All unpaid bills marked as paid');
+        }
+      }
+    } catch (error) {
+      console.error('Error updating bill status:', error);
+    }
+  }
+
   // Save payment record to database
   async savePaymentRecord(response, verificationData) {
     try {
       const { supabase } = await import('../supabaseClient');
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        console.error('No authenticated user found');
+        return null;
+      }
       
       const { data, error } = await supabase
         .from('payments')
@@ -175,7 +265,7 @@ class RazorpayService {
           status: 'SUCCESS',
           payment_method: 'Razorpay',
           verification_data: verificationData,
-          user_id: (await supabase.auth.getUser()).data.user?.id,
+          user_id: user.id,
           created_at: new Date().toISOString()
         });
 

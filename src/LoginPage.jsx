@@ -145,6 +145,18 @@ export default function LoginPage() {
     }
   }, [location.pathname]);
 
+  // Also react to Supabase auth state for password recovery
+  useEffect(() => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setMode('reset');
+      }
+    });
+    return () => {
+      listener?.subscription?.unsubscribe?.();
+    };
+  }, []);
+
   function validatePassword(password) {
     const feedback = [];
     let score = 0;
@@ -292,7 +304,9 @@ export default function LoginPage() {
     }
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail);
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+        redirectTo: `${window.location.origin}/reset-password`
+      });
       if (error) {
         setForgotStatus(error.message);
       } else {

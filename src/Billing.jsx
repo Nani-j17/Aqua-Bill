@@ -193,15 +193,20 @@ export default function Billing() {
 
           if (!error) {
               setAllBills(data || []);
-              // Generate current month bill if it doesn't exist
-              await ensureCurrentMonthBill();
           }
       }
       fetchAllBills();
   }, [user]);
 
+  // Separate useEffect for bill generation that depends on chartData
+  useEffect(() => {
+      if (user && chartData.length > 0) {
+          ensureCurrentMonthBill();
+      }
+  }, [user, chartData]);
+
   const ensureCurrentMonthBill = async () => {
-    if (!user) return;
+    if (!user || chartData.length === 0) return;
     
     const currentMonth = today.getMonth();
     const currentYear = today.getFullYear();
@@ -227,32 +232,77 @@ export default function Billing() {
         })
         .reduce((sum, d) => sum + (d.liters || 0), 0);
       
-      const amount = ((currentMonthUsage / 1000) * 4.5).toFixed(2);
-      const dueDate = new Date(currentYear, currentMonth + 1, 1).toISOString().slice(0, 10);
+      // Generate bills for current month and any missing previous months
+      await generateMissingBills(currentMonth, currentYear, currentMonthUsage);
+    }
+  };
+
+  const generateMissingBills = async (currentMonth, currentYear, currentMonthUsage) => {
+    // Generate current month bill
+    const currentAmount = ((currentMonthUsage / 1000) * 4.5).toFixed(2);
+    const currentDueDate = new Date(currentYear, currentMonth + 1, 1).toISOString().slice(0, 10);
+    const currentBillNumber = `AB${currentYear}${(currentMonth + 1).toString().padStart(2, '0')}${user.id.substring(0, 4).toUpperCase()}`;
+    
+    await supabase.from('bills').insert([{
+      user_id: user.id,
+      bill_number: currentBillNumber,
+      date: today.toISOString().slice(0, 10),
+      amount: currentAmount,
+      status: 'Unpaid',
+      due_date: currentDueDate
+    }]);
+
+    // Generate previous months bills if they don't exist (up to 6 months back)
+    for (let i = 1; i <= 6; i++) {
+      const checkMonth = currentMonth - i;
+      const checkYear = checkMonth < 0 ? currentYear - 1 : currentYear;
+      const adjustedMonth = checkMonth < 0 ? 12 + checkMonth : checkMonth;
       
-      // Generate bill number
-      const billNumber = `AB${currentYear}${(currentMonth + 1).toString().padStart(2, '0')}${user.id.substring(0, 4).toUpperCase()}`;
-      
-      // Insert new bill
-      await supabase.from('bills').insert([{
-        user_id: user.id,
-        bill_number: billNumber,
-        date: today.toISOString().slice(0, 10),
-        amount,
-        status: 'Unpaid',
-        due_date: dueDate
-      }]);
-      
-      // Refresh bills list
-      const { data: updatedBills } = await supabase
+      // Check if bill exists for this month
+      const { data: existingBill } = await supabase
         .from('bills')
         .select('*')
         .eq('user_id', user.id)
-        .order('date', { ascending: false });
+        .gte('date', `${checkYear}-${(adjustedMonth + 1).toString().padStart(2, '0')}-01`)
+        .lt('date', `${checkYear}-${(adjustedMonth + 2).toString().padStart(2, '0')}-01`)
+        .single();
+      
+      if (!existingBill) {
+        // Calculate usage for this month
+        const monthUsage = chartData
+          .filter(d => {
+            const dt = new Date(d.created_at);
+            return dt.getMonth() === adjustedMonth && dt.getFullYear() === checkYear;
+          })
+          .reduce((sum, d) => sum + (d.liters || 0), 0);
         
-      if (updatedBills) {
-        setAllBills(updatedBills);
+        if (monthUsage > 0) {
+          const amount = ((monthUsage / 1000) * 4.5).toFixed(2);
+          const dueDate = new Date(checkYear, adjustedMonth + 1, 1).toISOString().slice(0, 10);
+          const billNumber = `AB${checkYear}${(adjustedMonth + 1).toString().padStart(2, '0')}${user.id.substring(0, 4).toUpperCase()}`;
+          const billDate = new Date(checkYear, adjustedMonth, 1).toISOString().slice(0, 10);
+          
+          await supabase.from('bills').insert([{
+            user_id: user.id,
+            bill_number: billNumber,
+            date: billDate,
+            amount,
+            status: 'Unpaid',
+            due_date: dueDate
+          }]);
+        }
       }
+    }
+    
+    // Refresh bills list
+    const { data: updatedBills } = await supabase
+      .from('bills')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('date', { ascending: false });
+      
+    if (updatedBills) {
+      setAllBills(updatedBills);
     }
   };
 
@@ -305,20 +355,31 @@ const paginate = (pageNumber) => {
   }
 };
 
-const handleExport = () => {
-    if (filteredBills.length === 0) {
-        alert("No data to export.");
+const handleExport = (format) => {
+    if (allBills.length === 0) {
+        alert("No billing data to export.");
         return;
     }
+    
+    const billsToExport = filteredBills.length > 0 ? filteredBills : allBills;
+    
+    if (format === 'csv') {
+        exportToCSV(billsToExport);
+    } else if (format === 'pdf') {
+        exportToPDF(billsToExport);
+    }
+};
+
+const exportToCSV = (bills) => {
     const headers = ["Date", "Bill Number", "Amount", "Due Date", "Status"];
     const csvContent = [
         headers.join(","),
-        ...filteredBills.map(bill => [
-            formatDateDMY(bill.date),
-            bill.bill_number,
-            bill.amount,
-            formatDateDMY(bill.due_date || bill.date),
-            bill.status
+        ...bills.map(bill => [
+            `"${formatDateDMY(bill.date)}"`,
+            `"${bill.bill_number || 'N/A'}"`,
+            `"₹${bill.amount}"`,
+            `"${formatDateDMY(bill.due_date || bill.date)}"`,
+            `"${bill.status}"`
         ].join(","))
     ].join("\n");
 
@@ -326,16 +387,197 @@ const handleExport = () => {
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", "billing_history.csv");
+    link.setAttribute("download", `billing_history_${new Date().toISOString().slice(0, 10)}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+};
+
+
+const exportToPDF = (bills) => {
+    // Create a new window for PDF generation
+    const printWindow = window.open('', '_blank');
+    
+    const totalAmount = bills.reduce((sum, bill) => sum + parseFloat(bill.amount), 0);
+    const paidBills = bills.filter(bill => bill.status === 'Paid').length;
+    const unpaidBills = bills.filter(bill => bill.status === 'Unpaid').length;
+    
+    const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+            <head>
+                <title>AquaBill - Billing History</title>
+                <style>
+                    body {
+                        font-family: Arial, sans-serif;
+                        margin: 20px;
+                        color: #333;
+                    }
+                    .header {
+                        text-align: center;
+                        margin-bottom: 30px;
+                        border-bottom: 2px solid #3B82F6;
+                        padding-bottom: 20px;
+                    }
+                    .header h1 {
+                        color: #3B82F6;
+                        margin: 0;
+                        font-size: 28px;
+                    }
+                    .header p {
+                        margin: 5px 0;
+                        color: #666;
+                    }
+                    table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin-bottom: 30px;
+                    }
+                    th, td {
+                        border: 1px solid #ddd;
+                        padding: 12px;
+                        text-align: left;
+                    }
+                    th {
+                        background-color: #3B82F6;
+                        color: white;
+                        font-weight: bold;
+                    }
+                    .amount {
+                        text-align: right;
+                        font-weight: bold;
+                    }
+                    .status-paid {
+                        color: #059669;
+                        font-weight: bold;
+                    }
+                    .status-unpaid {
+                        color: #DC2626;
+                        font-weight: bold;
+                    }
+                    .summary {
+                        background-color: #f8fafc;
+                        border: 1px solid #e2e8f0;
+                        border-radius: 8px;
+                        padding: 20px;
+                        margin-top: 20px;
+                    }
+                    .summary h3 {
+                        margin-top: 0;
+                        color: #3B82F6;
+                    }
+                    .summary-grid {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                        gap: 15px;
+                    }
+                    .summary-item {
+                        text-align: center;
+                        padding: 15px;
+                        background-color: white;
+                        border-radius: 6px;
+                        border: 1px solid #e2e8f0;
+                    }
+                    .summary-item .label {
+                        font-size: 14px;
+                        color: #666;
+                        margin-bottom: 5px;
+                    }
+                    .summary-item .value {
+                        font-size: 18px;
+                        font-weight: bold;
+                        color: #333;
+                    }
+                    @media print {
+                        body { margin: 0; }
+                        .no-print { display: none; }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1>AquaBill</h1>
+                    <p>Billing History Report</p>
+                    <p>Generated on: ${new Date().toLocaleDateString('en-IN', { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    })}</p>
+                </div>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Bill Number</th>
+                            <th>Amount</th>
+                            <th>Due Date</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${bills.map(bill => `
+                            <tr>
+                                <td>${formatDateDMY(bill.date)}</td>
+                                <td>${bill.bill_number || 'N/A'}</td>
+                                <td class="amount">₹${bill.amount}</td>
+                                <td>${formatDateDMY(bill.due_date || bill.date)}</td>
+                                <td class="status-${bill.status.toLowerCase()}">${bill.status}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                
+                <div class="summary">
+                    <h3>Summary</h3>
+                    <div class="summary-grid">
+                        <div class="summary-item">
+                            <div class="label">Total Bills</div>
+                            <div class="value">${bills.length}</div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="label">Total Amount</div>
+                            <div class="value">₹${totalAmount.toFixed(2)}</div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="label">Paid Bills</div>
+                            <div class="value status-paid">${paidBills}</div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="label">Unpaid Bills</div>
+                            <div class="value status-unpaid">${unpaidBills}</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <script>
+                    window.onload = function() {
+                        setTimeout(() => {
+                            window.print();
+                        }, 500);
+                    };
+                </script>
+            </body>
+        </html>
+    `;
+    
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
 };
 
   const handleRazorpayPayment = async () => {
     if (!user) {
-      setPaymentError('User not authenticated');
+      setPaymentError('User not authenticated. Please login again.');
+      return;
+    }
+
+    // Validate payment amount
+    if (!currentBillAmount || currentBillAmount <= 0) {
+      setPaymentError('Invalid payment amount. Please try again.');
       return;
     }
 
@@ -355,6 +597,8 @@ const handleExport = () => {
         contact: profile?.mobile || '9999999999'
       };
 
+      console.log('Initiating payment for amount:', currentBillAmount);
+
       const result = await razorpayService.initiatePayment(
         parseFloat(currentBillAmount),
         userDetails
@@ -365,13 +609,41 @@ const handleExport = () => {
         setPaymentProcessing(false);
         setPaymentError('');
         setPaymentSuccess(true);
-        setTimeout(() => setPaymentSuccess(false), 3000);
+        
+        // Refresh bills after successful payment
+        setTimeout(async () => {
+          setPaymentSuccess(false);
+          // Refresh bills data
+          const { data: updatedBills } = await supabase
+            .from('bills')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('date', { ascending: false });
+          if (updatedBills) {
+            setAllBills(updatedBills);
+          }
+        }, 3000);
       } else {
         setPaymentError(result.error || 'Payment initiation failed');
         setPaymentProcessing(false);
       }
     } catch (error) {
-      setPaymentError(error.message || 'Payment processing failed. Please try again.');
+      console.error('Payment error:', error);
+      
+      // Handle specific error types
+      let errorMessage = 'Payment processing failed. Please try again.';
+      
+      if (error.message.includes('cancelled')) {
+        errorMessage = 'Payment was cancelled. You can try again anytime.';
+      } else if (error.message.includes('failed')) {
+        errorMessage = 'Payment failed. Please check your payment details and try again.';
+      } else if (error.message.includes('network') || error.message.includes('timeout')) {
+        errorMessage = 'Network error. Please check your internet connection and try again.';
+      } else if (error.message.includes('Invalid')) {
+        errorMessage = error.message;
+      }
+      
+      setPaymentError(errorMessage);
       setPaymentProcessing(false);
     }
   };
@@ -648,11 +920,12 @@ const handleExport = () => {
             </motion.div>
           </div>
           <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.7 }} className="bg-white/40 backdrop-blur-lg p-6 rounded-2xl shadow-lg border border-white/30 mb-8">
-            <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-3">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6 gap-4">
               <h3 className="text-xl font-semibold text-gray-800">Billing History</h3>
-              <div className="flex flex-wrap items-center gap-3 mt-4 md:mt-0">
-                <div className="relative">
-                    <select value={dateRangeFilter} onChange={e => setDateRangeFilter(e.target.value)} className="appearance-none bg-white text-gray-700 py-2 pl-3 pr-8 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
+                <div className="flex flex-col sm:flex-row gap-3 flex-1">
+                  <div className="relative min-w-[140px]">
+                      <select value={dateRangeFilter} onChange={e => setDateRangeFilter(e.target.value)} className="appearance-none bg-white text-gray-700 py-2 pl-3 pr-8 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary w-full">
                         <option value="all">All Time</option>
                         <option value="30d">Last 30 Days</option>
                         <option value="6m">Last 6 Months</option>
@@ -662,8 +935,8 @@ const handleExport = () => {
                       <RiArrowDownSLine />
                   </div>
                 </div>
-                <div className="relative">
-                    <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="appearance-none bg-white text-gray-700 py-2 pl-3 pr-8 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
+                  <div className="relative min-w-[140px]">
+                      <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="appearance-none bg-white text-gray-700 py-2 pl-3 pr-8 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary w-full">
                         <option value="all">All Statuses</option>
                         <option value="Paid">Paid</option>
                         <option value="Unpaid">Unpaid</option>
@@ -672,21 +945,47 @@ const handleExport = () => {
                       <RiArrowDownSLine />
                   </div>
                 </div>
-                <div className="relative flex-grow md:max-w-xs w-full">
+                  <div className="relative flex-1 min-w-[200px]">
                     <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} type="text" className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Search bills..." />
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <RiSearchLine className="text-gray-400" />
                   </div>
                 </div>
-                <button onClick={handleExport} className="px-6 py-2 rounded-full font-medium bg-white text-primary border border-primary hover:bg-primary hover:text-white transition-colors duration-200 flex items-center gap-2 whitespace-nowrap">
-                  <RiDownloadLine /> Export
+                </div>
+                {allBills.length > 0 && (
+                  <div className="flex gap-2">
+                    <button onClick={() => handleExport('csv')} className="px-3 py-2 rounded-lg font-medium bg-white text-primary border border-primary hover:bg-primary hover:text-white transition-colors duration-200 flex items-center justify-center gap-2 whitespace-nowrap text-sm">
+                      <RiDownloadLine size={14} /> CSV
+                    </button>
+                    <button onClick={() => handleExport('pdf')} className="px-3 py-2 rounded-lg font-medium bg-red-600 text-white border border-red-600 hover:bg-red-700 transition-colors duration-200 flex items-center justify-center gap-2 whitespace-nowrap text-sm">
+                      <RiDownloadLine size={14} /> PDF
                 </button>
+                  </div>
+                )}
               </div>
             </div>
             <div className="overflow-x-auto">
-              {/* Mobile Cards */}
-              <div className="md:hidden space-y-4">
-                {currentBills.map(bill => (
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  <span className="ml-3 text-gray-600">Loading bills...</span>
+                </div>
+              ) : currentBills.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="text-6xl mb-4">📋</div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">No Bills Found</h3>
+                  <p className="text-gray-500 mb-4">
+                    {filteredBills.length === 0 && allBills.length > 0 
+                      ? "No bills match your current filters. Try adjusting your search criteria."
+                      : "No bills have been generated yet. Bills will appear here once water usage data is available."
+                    }
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Mobile Cards */}
+                  <div className="md:hidden space-y-4">
+                    {currentBills.map(bill => (
                   <div key={bill.id} className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
                     <div className="flex items-center justify-between mb-3">
                       <div>
@@ -721,69 +1020,67 @@ const handleExport = () => {
               </div>
 
               {/* Desktop Table */}
-              <table className="hidden md:table min-w-full divide-y divide-gray-200">
+              <table className="hidden md:table w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bill Number</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bill Number</th>
+                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
+                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-4 lg:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                         {currentBills.map(bill => (
                             <tr key={bill.id} className="hover:bg-gray-50 transition-colors">
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{formatDateDMY(bill.date)}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{bill.bill_number || 'N/A'}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">₹{bill.amount}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{formatDateDMY(bill.due_date || bill.date)}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                <td className="px-4 lg:px-6 py-4 text-sm text-gray-700">{formatDateDMY(bill.date)}</td>
+                                <td className="px-4 lg:px-6 py-4 text-sm text-gray-700 font-mono text-xs">{bill.bill_number || 'N/A'}</td>
+                                <td className="px-4 lg:px-6 py-4 text-sm font-medium text-gray-900">₹{bill.amount}</td>
+                                <td className="px-4 lg:px-6 py-4 text-sm text-gray-700">{formatDateDMY(bill.due_date || bill.date)}</td>
+                      <td className="px-4 lg:px-6 py-4">
+                                    <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
                                       bill.status.toLowerCase() === 'paid' 
                                         ? 'bg-green-100 text-green-700' 
-                                        : 'bg-yellow-100 text-yellow-700'
+                                        : 'bg-red-100 text-red-700'
                                     }`}>
                                         {bill.status}
                                     </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <td className="px-4 lg:px-6 py-4 text-right text-sm font-medium">
                         <div className="flex items-center justify-end gap-2">
-                          <button className="text-primary hover:text-blue-700 transition-colors"><RiDownloadLine /></button>
+                          <button className="text-primary hover:text-blue-700 transition-colors p-1 rounded hover:bg-blue-50">
+                            <RiDownloadLine size={16} />
+                          </button>
                         </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+                </>
+              )}
             </div>
+            {filteredBills.length > 0 && (
             <div className="mt-6 flex flex-col sm:flex-row gap-3 sm:gap-0 items-center justify-between">
                 <div className="text-sm text-gray-500">
-                    {filteredBills.length === 0 ? (
-                        "No results found"
-                    ) : (
-                        <>
                     Showing <span className="font-medium">{indexOfFirstBill + 1}</span> to <span className="font-medium">{Math.min(indexOfLastBill, filteredBills.length)}</span> of <span className="font-medium">{filteredBills.length}</span> results
-                        </>
-                    )}
                 </div>
-              {filteredBills.length > 0 && (
               <div className="flex items-center space-x-2">
-                    <button onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1} className="px-3 py-1 border border-gray-300 rounded-button text-gray-600 hover:text-primary hover:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                      <button onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1} className="px-3 py-1 border border-gray-300 rounded-lg text-gray-600 hover:text-primary hover:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                         Prev
                     </button>
                     {[...Array(totalPages).keys()].map(number => (
-                        <button key={number + 1} onClick={() => paginate(number + 1)} className={`px-3 py-1 border rounded-button transition-colors ${currentPage === number + 1 ? 'bg-primary text-white' : 'border-gray-300 text-gray-600 hover:text-primary hover:border-primary'}`}>
+                          <button key={number + 1} onClick={() => paginate(number + 1)} className={`px-3 py-1 border rounded-lg transition-colors ${currentPage === number + 1 ? 'bg-primary text-white' : 'border-gray-300 text-gray-600 hover:text-primary hover:border-primary'}`}>
                             {number + 1}
                         </button>
                     ))}
-                    <button onClick={() => paginate(currentPage + 1)} disabled={currentPage === totalPages} className="px-3 py-1 border border-gray-300 rounded-button text-gray-600 hover:text-primary hover:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                      <button onClick={() => paginate(currentPage + 1)} disabled={currentPage === totalPages} className="px-3 py-1 border border-gray-300 rounded-lg text-gray-600 hover:text-primary hover:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                         Next
                     </button>
               </div>
-              )}
             </div>
+            )}
           </motion.div>
           <motion.div
   initial={{ opacity: 0, y: 30 }}
@@ -859,14 +1156,21 @@ const handleExport = () => {
             
             <div className="space-y-4">
               {paymentError && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <div className="flex items-center">
-                    <svg className="w-5 h-5 text-red-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-red-50 border border-red-200 rounded-lg p-4"
+                >
+                  <div className="flex items-start">
+                    <svg className="w-5 h-5 text-red-600 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                     </svg>
-                    <p className="text-red-600 text-sm font-medium">{paymentError}</p>
+                    <div>
+                      <p className="text-red-800 text-sm font-medium">Payment Failed</p>
+                      <p className="text-red-600 text-sm mt-1">{paymentError}</p>
                   </div>
                 </div>
+                </motion.div>
               )}
               
               <div 

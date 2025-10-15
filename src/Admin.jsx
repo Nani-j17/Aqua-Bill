@@ -514,7 +514,7 @@ export default function Admin() {
 
                 {/* Desktop Table */}
                 <div className="hidden md:block overflow-x-auto">
-                  <table className="w-full">
+                <table className="w-full">
                   <thead className="bg-white/20">
                     <tr>
                       <th className="px-6 py-4 text-left text-white font-semibold">User</th>
@@ -613,7 +613,7 @@ export default function Admin() {
                       </motion.tr>
                     ))}
                   </tbody>
-                  </table>
+                </table>
                 </div>
               </div>
             )}

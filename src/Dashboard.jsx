@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Droplets } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -52,6 +52,7 @@ function formatMonthYear(dateStr) {
 export default function Dashboard() {
   const navigate = useNavigate();
   const gradient = useMemo(() => getRandomGradient(), []);
+  const chartRef = useRef(null);
   const [period, setPeriod] = React.useState('daily');
   const [user, setUser] = useState(null);
   const [usageData, setUsageData] = useState([]);
@@ -572,6 +573,251 @@ export default function Dashboard() {
     }
   }
 
+  // Export functions
+  const handleExportUsageData = (format) => {
+    if (cleanedUsageData.length === 0) {
+      alert("No usage data to export.");
+      return;
+    }
+    
+    if (format === 'pdf') {
+      exportUsageToPDF();
+    }
+  };
+
+
+  const exportUsageToPDF = () => {
+    // Try to capture the live chart image from Chart.js instance
+    let chartImageDataUrl = '';
+    try {
+      const chartInstance = chartRef?.current?.chart || chartRef?.current;
+      if (chartInstance && chartInstance.toBase64Image) {
+        chartImageDataUrl = chartInstance.toBase64Image('image/png', 1.0);
+      } else if (chartInstance?.canvas) {
+        chartImageDataUrl = chartInstance.canvas.toDataURL('image/png');
+      }
+    } catch (e) {
+      console.warn('Failed to capture chart image for PDF:', e);
+    }
+
+    const printWindow = window.open('', 'AquaBill - Water Usage Report');
+    
+    const totalUsage = cleanedUsageData.reduce((sum, d) => sum + (d.liters || 0), 0);
+    const avgFlowRate = cleanedUsageData.reduce((sum, d) => sum + (d.flow_rate || 0), 0) / cleanedUsageData.length;
+    
+    // Get current month data for the table
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+    const currentMonthData = cleanedUsageData.filter(d => {
+      const dt = new Date(d.created_at);
+      return dt.getMonth() === currentMonth && dt.getFullYear() === currentYear;
+    });
+    
+    const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+            <head>
+                <title classname="text-center">AquaBill - Water Usage Report</title>
+                <style>
+                    body {
+                        font-family: Arial, sans-serif;
+                        margin: 20px;
+                        color: #333;
+                    }
+                    .header {
+                        text-align: center;
+                        margin-bottom: 30px;
+                        border-bottom: 2px solid #3B82F6;
+                        padding-bottom: 20px;
+                    }
+                    .header h1 {
+                        color: #3B82F6;
+                        margin: 0;
+                        font-size: 28px;
+                    }
+                    .header h2 {
+                        color: #3B82F6;
+                        margin: 10px 0;
+                        font-size: 24px;
+                        text-align: center;
+                    }
+                    .header p {
+                        margin: 5px 0;
+                        color: #666;
+                    }
+                    .summary {
+                        background-color: #f8fafc;
+                        border: 1px solid #e2e8f0;
+                        border-radius: 8px;
+                        padding: 20px;
+                        margin-bottom: 30px;
+                    }
+                    .summary h3 {
+                        margin-top: 0;
+                        color: #3B82F6;
+                        text-align: center;
+                    }
+                    .summary-grid {
+                        display: grid;
+                        grid-template-columns: repeat(3, 1fr);
+                        gap: 15px;
+                        max-width: 600px;
+                        margin: 0 auto;
+                    }
+                    .summary-item {
+                        text-align: center;
+                        padding: 15px;
+                        background-color: white;
+                        border-radius: 6px;
+                        border: 1px solid #e2e8f0;
+                    }
+                    .summary-item .label {
+                        font-size: 14px;
+                        color: #666;
+                        margin-bottom: 5px;
+                    }
+                    .summary-item .value {
+                        font-size: 18px;
+                        font-weight: bold;
+                        color: #333;
+                    }
+                    .chart-section {
+                        text-align: center;
+                        padding: 40px;
+                        background-color: #f8fafc;
+                        border: 2px dashed #cbd5e0;
+                        border-radius: 8px;
+                        margin: 20px 0;
+                    }
+                    .chart-section h3 {
+                        color: #3B82F6;
+                        margin-bottom: 10px;
+                    }
+                    .chart-img {
+                        display: block;
+                        margin: 0 auto;
+                        max-width: 100%;
+                        height: 300px;
+                        object-fit: contain;
+                        background: transparent;
+                        border-radius: 8px;
+                    }
+                    .data-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin-top: 20px;
+                    }
+                    .data-table th, .data-table td {
+                        border: 1px solid #ddd;
+                        padding: 8px;
+                        text-align: left;
+                    }
+                    .data-table th {
+                        background-color: #3B82F6;
+                        color: white;
+                        font-weight: bold;
+                    }
+                    .data-table tr:nth-child(even) {
+                        background-color: #f9f9f9;
+                    }
+                    @media print {
+                        body { margin: 0; }
+                        .no-print { display: none; }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1>AquaBill</h1>
+                    <h2 style="text-align:center">Water Usage Report</h2>
+                    <p>Generated on: ${new Date().toLocaleDateString('en-IN', { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    })}</p>
+                </div>
+                
+                <div class="summary">
+                    <h3>Usage Summary</h3>
+                    <div class="summary-grid">
+                        <div class="summary-item">
+                            <div class="label">Total Usage</div>
+                            <div class="value">${totalUsage.toFixed(2)} Liters</div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="label">Average Flow Rate</div>
+                            <div class="value">${avgFlowRate.toFixed(2)} L/min</div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="label">Current Bill</div>
+                            <div class="value">₹${currentBillAmount.toFixed(2)}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-section">
+                    <h3>Water Usage Chart</h3>
+                    <p>Monthly water usage visualization</p>
+                    ${chartImageDataUrl ? `<img class="chart-img" src="${chartImageDataUrl}" alt="Usage Chart" />` : `
+                    <div style="height: 300px; border: 2px dashed #cbd5e0; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #64748b; font-size: 16px;">
+                        <div style="text-align: center;">
+                            <div style="font-size: 40px; margin-bottom: 8px;">📈</div>
+                            <div>Monthly Usage Chart</div>
+                            <div style="font-size: 13px; opacity: 0.8; margin-top: 4px;">No data available</div>
+                        </div>
+                    </div>`}
+                </div>
+                
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Flow Rate (L/min)</th>
+                            <th>Liters Used</th>
+                            <th>Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${currentMonthData.length > 0 ? currentMonthData.slice(0, 20).map(data => `
+                            <tr>
+                                <td>${formatDateDMY(data.created_at)}</td>
+                                <td>${(data.flow_rate || 0).toFixed(2)}</td>
+                                <td>${(data.liters || 0).toFixed(2)}</td>
+                                <td>${new Date(data.created_at).toLocaleString()}</td>
+                            </tr>
+                        `).join('') : `
+                            <tr>
+                                <td colspan="4" style="text-align: center; font-style: italic; padding: 20px;">
+                                    No current month data available
+                                </td>
+                            </tr>
+                        `}
+                        ${currentMonthData.length > 20 ? `
+                            <tr>
+                                <td colspan="4" style="text-align: center; font-style: italic;">
+                                    ... and ${currentMonthData.length - 20} more records for current month
+                                </td>
+                            </tr>
+                        ` : ''}
+                    </tbody>
+                </table>
+                
+                <script>
+                    window.onload = function() {
+                        try { document.title = 'AquaBill - Water Usage Report'; history.replaceState({}, '', '/'); } catch (e) {}
+                        setTimeout(() => { window.print(); }, 300);
+                    };
+                </script>
+            </body>
+        </html>
+    `;
+    
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+  };
+
   // Glassmorphism + animated gradient background
   return (
     <div
@@ -737,14 +983,15 @@ export default function Dashboard() {
                   ))}
                 </div>
                 <button
-                  className="px-4 md:px-6 py-2 rounded-full font-medium bg-white text-primary border border-primary hover:bg-primary hover:text-white transition-colors duration-200 whitespace-nowrap"
+                  onClick={() => handleExportUsageData('pdf')}
+                  className="px-4 md:px-6 py-2 rounded-lg font-medium bg-red-600 text-white border border-red-600 hover:bg-red-700 transition-colors duration-200 whitespace-nowrap text-sm"
                 >
-                  <i className="ri-download-line mr-1" /> Export Data
+                  <i className="ri-download-line mr-1" /> Export PDF
                 </button>
               </div>
             </div>
             <div className="w-full" style={{ height: '300px', maxHeight: '350px' }}>
-              <Line data={chartData} options={chartOptions} style={{ width: '100%', height: '100%' }} />
+              <Line ref={chartRef} data={chartData} options={chartOptions} style={{ width: '100%', height: '100%' }} />
             </div>
           </motion.div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
