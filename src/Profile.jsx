@@ -111,12 +111,6 @@ export default function Profile() {
   const [profilePhotoUrl, setProfilePhotoUrl] = useState('');
   const [picPreview, setPicPreview] = useState('');
   const [pendingPhotoFile, setPendingPhotoFile] = useState(null);
-  const [mobileModified, setMobileModified] = useState(false);
-  const [mobileVerified, setMobileVerified] = useState(false);
-  const [showOtpModal, setShowOtpModal] = useState(false);
-  const [otpInput, setOtpInput] = useState('');
-  const [otpLoading, setOtpLoading] = useState(false);
-  const [otpError, setOtpError] = useState('');
 
   // On page load, fetch profile and set picPreview from DB
   useEffect(() => {
@@ -271,11 +265,6 @@ export default function Profile() {
       let digits = value.replace(/\D/g, '').slice(0, 10);
       setValidation(v => ({ ...v, mobile: validateMobile(digits) }));
       setProfile(p => ({ ...p, mobile: digits }));
-      // Track if mobile number has been modified
-      if (editMode && digits !== profile.mobile) {
-        setMobileModified(true);
-        setMobileVerified(false);
-      }
       return;
     }
     if (field === 'address') {
@@ -283,42 +272,6 @@ export default function Profile() {
       return;
     }
     setProfile(p => ({ ...p, [field]: value }));
-  };
-
-  const handleMobileVerify = async () => {
-    if (!profile.mobile || !validation.mobile) return;
-    
-    // Show OTP modal
-    setShowOtpModal(true);
-    setOtpInput('');
-    setOtpError('');
-    
-    // Here you would typically send an OTP or verification code
-    // For now, we'll simulate sending OTP
-    console.log(`OTP sent to ${profile.mobile}`);
-  };
-
-  const handleOtpVerify = async () => {
-    if (!otpInput.trim()) {
-      setOtpError('Please enter the OTP');
-      return;
-    }
-    
-    setOtpLoading(true);
-    setOtpError('');
-    
-    // Simulate OTP verification
-    setTimeout(() => {
-      setOtpLoading(false);
-      if (otpInput === '123456') { // Demo OTP
-        setMobileVerified(true);
-        setMobileModified(false);
-        setShowOtpModal(false);
-        setOtpInput('');
-      } else {
-        setOtpError('Invalid OTP. Please try again.');
-      }
-    }, 1500);
   };
 
   const handleNotif = (type) => setProfile(p => ({ ...p, notifications: { ...p.notifications, [type]: !p.notifications[type] } }));
@@ -469,11 +422,6 @@ export default function Profile() {
     setSaveSuccess(false);
     setSaving(false);
     setSaveError('');
-    setMobileModified(false);
-    setMobileVerified(false);
-    setShowOtpModal(false);
-    setOtpInput('');
-    setOtpError('');
   };
 
   const handleSignOut = async () => {
@@ -556,7 +504,7 @@ export default function Profile() {
           </div>
         </motion.div>
       </header>
-      <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: 'easeOut' }} className="w-full max-w-4xl mx-auto mt-12 mb-8">
+      <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: 'easeOut' }} className="w-full max-w-4xl mx-auto mt-6 md:mt-12 mb-8 px-2">
         {loading || !profile ? (
           <div className="flex flex-col items-center justify-center h-full">
             <Droplets size={60} className="text-primary animate-spin" />
@@ -584,7 +532,7 @@ export default function Profile() {
             </motion.div>
 
             {/* Personal Info Card */}
-            <motion.div initial="hidden" animate="visible" variants={stagger} className="w-full px-12 pt-8 pb-3 grid grid-cols-1 md:grid-cols-2 gap-8">
+            <motion.div initial="hidden" animate="visible" variants={stagger} className="w-full px-4 md:px-12 pt-8 pb-3 grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
               <AnimatedField i={0}>
                 <FloatingInput
                   label="First Name"
@@ -607,15 +555,12 @@ export default function Profile() {
                 <FloatingInput
                   label="Mobile"
                   icon={<RiPhoneLine />}
-                  value={profile.mobile || ''}
+                  value={editMode ? (profile.mobile || '') : (profile.mobile ? `+91 ${profile.mobile}` : '')}
                   onChange={v => handleField('mobile', v)}
                   disabled={!editMode}
                   placeholder="Enter 10 digit mobile"
                   maxLength={10}
                   error={showErrors && !validation.mobile && profile.mobile ? 'Please enter a valid 10 digit mobile number starting with 6-9.' : ''}
-                  showVerifyButton={editMode && mobileModified}
-                  onVerify={handleMobileVerify}
-                  isVerified={mobileVerified}
                 />
               </AnimatedField>
               <AnimatedField i={2}>
@@ -669,20 +614,32 @@ export default function Profile() {
             </motion.div>
 
             {/* Account Info Card */}
-            <motion.div initial="hidden" animate="visible" variants={stagger} className="w-full px-12 pt-2 pb-3 grid grid-cols-1 md:grid-cols-2 gap-8">
+            <motion.div initial="hidden" animate="visible" variants={stagger} className="w-full px-4 md:px-12 pt-2 pb-3 grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
             </motion.div>
 
             {/* Preferences Card */}
-            <motion.div initial="hidden" animate="visible" variants={stagger} className="w-full px-12 pt-2 pb-3 grid grid-cols-1 md:grid-cols-2 gap-8">
-              <AnimatedField i={8}>
-                <div className="flex items-center gap-6">
-                  <label className="text-gray-500 text-sm">Notifications:</label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" className="accent-blue-500" checked={profile.notifications.email} onChange={() => editMode && handleNotif('email')} disabled={!editMode} /> Email
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" className="accent-blue-500" checked={profile.notifications.sms} onChange={() => editMode && handleNotif('sms')} disabled={!editMode} /> SMS
-                  </label>
+            <motion.div initial="hidden" animate="visible" variants={stagger} className="w-full px-4 md:px-12 pt-2 pb-3 grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+              <AnimatedField i={8} className="md:col-span-2">
+                <div className="w-full bg-white/60 border border-white/70 rounded-xl px-4 py-3 flex items-center justify-between shadow-sm">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-700">Email Notifications</p>
+                    <p className="text-xs text-gray-500">Receive billing alerts and payment updates by email</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => editMode && handleNotif('email')}
+                    disabled={!editMode}
+                    className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+                      profile.notifications.email ? 'bg-blue-500' : 'bg-gray-300'
+                    } ${!editMode ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    aria-label="Toggle email notifications"
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                        profile.notifications.email ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
                 </div>
               </AnimatedField>
             </motion.div>
@@ -743,36 +700,6 @@ export default function Profile() {
               )}
             </AnimatePresence>
 
-            {/* OTP Verification Modal */}
-            <AnimatePresence>
-              {showOtpModal && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-                  <motion.div initial={{ scale: 0.8, y: 40 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.8, y: 40 }} transition={{ duration: 0.3, type: 'spring' }} className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full flex flex-col items-center relative border-2 border-blue-200">
-                    <RiPhoneLine size={36} className="text-blue-500 mb-2" />
-                    <div className="text-xl font-bold mb-2 text-gray-800">Verify Mobile Number</div>
-                    <div className="text-sm text-gray-600 mb-4 text-center">Enter the 6-digit code sent to</div>
-                    <div className="text-lg font-semibold text-gray-800 mb-4">{profile.mobile}</div>
-                    <div className="w-full flex flex-col gap-3 mt-2">
-                      <input 
-                        type="text" 
-                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all text-lg text-center tracking-widest" 
-                        placeholder="Enter OTP" 
-                        value={otpInput} 
-                        onChange={e => setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))} 
-                        disabled={otpLoading}
-                        maxLength={6}
-                        autoFocus
-                      />
-                    </div>
-                    {otpError && <div className="text-red-500 mt-2 text-sm font-semibold">{otpError}</div>}
-                    <div className="flex gap-4 mt-6 w-full justify-center">
-                      <motion.button whileTap={{ scale: 0.97 }} className="px-6 py-2 bg-blue-500 text-white rounded-full font-bold shadow hover:bg-blue-600 transition-colors text-lg disabled:bg-blue-200" onClick={handleOtpVerify} disabled={otpLoading}>{otpLoading ? 'Verifying...' : 'Verify'}</motion.button>
-                      <motion.button whileTap={{ scale: 0.97 }} className="px-6 py-2 bg-red-500 text-white rounded-full font-bold shadow hover:bg-red-600 transition-colors text-lg" onClick={() => setShowOtpModal(false)} disabled={otpLoading}>Cancel</motion.button>
-                    </div>
-                  </motion.div>
-                </motion.div>
-              )}
-            </AnimatePresence>
           </motion.div>
         )}
       </motion.div>
@@ -788,7 +715,7 @@ function AnimatedField({ i, className = '', children }) {
   );
 }
 
-function FloatingInput({ label, icon, value, onChange, disabled, type = 'text', readOnly, placeholder, error, onBlur, maxLength, min, max, showVerifyButton, onVerify, isVerified }) {
+function FloatingInput({ label, icon, value, onChange, disabled, type = 'text', readOnly, placeholder, error, onBlur, maxLength, min, max }) {
   const [isFocused, setIsFocused] = React.useState(false);
   return (
     <div className="w-full">
@@ -802,7 +729,7 @@ function FloatingInput({ label, icon, value, onChange, disabled, type = 'text', 
         <span className="absolute left-4 top-2 text-gray-400 text-lg pointer-events-none">{icon}</span>
         <input
           type={type}
-          className={`peer w-full bg-transparent ${showVerifyButton ? 'pr-28' : 'px-12'} pt-6 pb-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all duration-200 ${disabled ? 'opacity-70 cursor-default' : ''}`}
+          className={`peer w-full bg-transparent px-12 pt-6 pb-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all duration-200 ${disabled ? 'opacity-70 cursor-default' : ''}`}
           value={value}
           onChange={e => onChange && onChange(e.target.value)}
           disabled={disabled}
@@ -814,21 +741,6 @@ function FloatingInput({ label, icon, value, onChange, disabled, type = 'text', 
           min={min}
           max={max}
         />
-        {showVerifyButton && (
-          <button
-            onClick={onVerify}
-            disabled={!value || value.length !== 10 || disabled}
-            className={`absolute right-3 top-1/2 transform -translate-y-1/2 px-4 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
-              isVerified 
-                ? 'bg-green-500 text-white cursor-default' 
-                : value && value.length === 10
-                ? 'bg-blue-500 text-white hover:bg-blue-600'
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            {isVerified ? '✓ Verified' : 'Verify'}
-          </button>
-        )}
       </motion.div>
       {error && <div className="text-xs text-red-500 mt-1 ml-1">{error}</div>}
     </div>

@@ -51,7 +51,7 @@
   }
   
   .card {
-    @apply bg-white/70 backdrop-blur-xl rounded-2xl shadow-2xl p-8 w-full max-w-md mx-auto border-2 border-transparent relative overflow-hidden;
+    @apply bg-white/70 backdrop-blur-xl rounded-2xl shadow-2xl p-5 sm:p-8 w-full max-w-md mx-auto border-2 border-transparent relative overflow-hidden;
   }
   
   .input-group {

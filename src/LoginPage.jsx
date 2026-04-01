@@ -149,6 +149,27 @@ export default function LoginPage() {
     checkCurrentUser();
   }, [navigate, location.pathname]);
 
+  // Handle auth links from email confirmation/recovery on initial load.
+  useEffect(() => {
+    const hash = window.location.hash || '';
+    if (!hash.includes('access_token')) return;
+    const params = new URLSearchParams(hash.replace('#', '?'));
+    const type = params.get('type');
+
+    if (type === 'recovery') {
+      setMode('reset');
+      return;
+    }
+
+    if (type === 'signup') {
+      setSuccessMessage('Email confirmed successfully. Redirecting to dashboard...');
+      setSignupJustCompleted(true);
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 1200);
+    }
+  }, [navigate]);
+
   // Check if we're on the reset password route and extract token
   useEffect(() => {
     if (location.pathname === '/reset-password') {
@@ -169,12 +190,14 @@ export default function LoginPage() {
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
         setMode('reset');
+      } else if (event === 'SIGNED_IN' && session?.user && location.pathname === '/') {
+        navigate('/dashboard');
       }
     });
     return () => {
       listener?.subscription?.unsubscribe?.();
     };
-  }, []);
+  }, [location.pathname, navigate]);
 
   function validatePassword(password) {
     const feedback = [];
