@@ -42,7 +42,7 @@ A modern water billing management system built with React and Supabase.
    ```
 
 3. Set up environment variables:
-   Create a `.env` file in the root directory and add your Supabase credentials:
+   Copy `.env.example` to `.env` in the root directory and add your Supabase credentials:
    ```
    REACT_APP_SUPABASE_URL=your_supabase_url
    REACT_APP_SUPABASE_ANON_KEY=your_supabase_anon_key
