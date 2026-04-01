@@ -20,12 +20,39 @@ function getRandomGradient() {
 }
 
 // Helper to generate random account number
-function generateAccountNumber() {
+function generateAccountNumber(seed = '') {
+  if (seed) {
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+      hash = (hash * 31 + seed.charCodeAt(i)) % 100000;
+    }
+    const num = String(hash).padStart(5, '0');
+    return `AQB-${num}`;
+  }
   let num = '';
   for (let i = 0; i < 5; i++) {
     num += Math.floor(Math.random() * 9) + 1;
   }
   return `AQB-${num}`;
+}
+
+function pickBestProfileRow(rows = []) {
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+  const scoreRow = (row) => {
+    let score = 0;
+    if (row?.mobile) score += 1;
+    if (row?.dob) score += 1;
+    if (row?.address) score += 1;
+    if (row?.account_number || row?.account) score += 2;
+    if (row?.join_date || row?.joinDate) score += 2;
+    if (row?.profile_photo_url) score += 2;
+    if (row?.service_type || row?.serviceType) score += 1;
+    return score;
+  };
+  return rows.reduce((best, current) => {
+    if (!best) return current;
+    return scoreRow(current) > scoreRow(best) ? current : best;
+  }, null);
 }
 
 // Remove initialProfile and dummy state
@@ -101,17 +128,20 @@ export default function Profile() {
       setFirstName((user.user_metadata?.first_name || '').trim());
       setLastName((user.user_metadata?.last_name || '').trim());
       // 2. Fetch profile from DB
-      let { data: dbProfile } = await supabase
+      const { data: dbProfiles, error: dbProfilesError } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', user.id)
-        .single();
+        .eq('id', user.id);
+      if (dbProfilesError) {
+        console.error('Error fetching profile rows:', dbProfilesError);
+      }
+      let dbProfile = pickBestProfileRow(dbProfiles);
       let needsUpdate = false;
       // 3. If not exist, create with join_date and account_number
       if (!dbProfile) {
         const joinDate = user.created_at?.slice(0, 10);
-        const accountNumber = generateAccountNumber();
-        const { data: newProfile } = await supabase
+        const accountNumber = generateAccountNumber(user.id);
+        const { data: newProfile, error: insertProfileError } = await supabase
           .from('profiles')
           .insert({
             id: user.id,
@@ -121,6 +151,9 @@ export default function Profile() {
           })
           .select()
           .single();
+        if (insertProfileError) {
+          console.error('Error creating profile row:', insertProfileError);
+        }
         dbProfile = newProfile;
       } else {
         // 4. If missing join_date or account_number, update them
@@ -130,18 +163,42 @@ export default function Profile() {
           needsUpdate = true;
         }
         if (!dbProfile.account_number) {
-          updates.account_number = generateAccountNumber();
+          updates.account_number = generateAccountNumber(user.id);
           needsUpdate = true;
         }
         if (needsUpdate) {
-          const { data: updatedProfile } = await supabase
+          const { data: updatedProfiles, error: updateProfileError } = await supabase
             .from('profiles')
             .update(updates)
             .eq('id', user.id)
-            .select()
-            .single();
-          dbProfile = updatedProfile;
+            .select('*');
+          if (updateProfileError) {
+            console.error('Error backfilling profile fields:', updateProfileError);
+          }
+          dbProfile = Array.isArray(updatedProfiles) ? updatedProfiles[0] : dbProfile;
         }
+      }
+      // 5. Normalize/guarantee values and persist once via upsert
+      const normalizedJoinDate =
+        dbProfile?.join_date ||
+        dbProfile?.joinDate ||
+        user.created_at?.slice(0, 10) ||
+        '';
+      const normalizedAccountNumber =
+        dbProfile?.account_number ||
+        dbProfile?.account ||
+        generateAccountNumber(user.id);
+
+      const { error: normalizeUpsertError } = await supabase
+        .from('profiles')
+        .upsert({
+          id: user.id,
+          email: user.email || dbProfile?.email || '',
+          join_date: normalizedJoinDate,
+          account_number: normalizedAccountNumber
+        });
+      if (normalizeUpsertError) {
+        console.error('Error normalizing join_date/account_number:', normalizeUpsertError);
       }
       // Defensive: If still no dbProfile, set defaults and return
       if (!dbProfile) {
@@ -150,9 +207,9 @@ export default function Profile() {
           mobile: '',
           dob: '',
           address: '',
-          account_number: '',
+          account_number: normalizedAccountNumber,
           connection_status: '',
-          join_date: '',
+          join_date: normalizedJoinDate,
           serviceType: '',
           notifications: { email: true, sms: false },
         });
@@ -165,11 +222,14 @@ export default function Profile() {
         mobile: dbProfile.mobile || '',
         dob: dbProfile.dob || '',
         address: dbProfile.address || '',
-        account_number: dbProfile.account_number || '',
+        account_number: normalizedAccountNumber,
         connection_status: dbProfile.connection_status || '',
-        join_date: dbProfile.join_date || '',
-        serviceType: dbProfile.serviceType || '',
-        notifications: dbProfile.notifications || { email: true, sms: false },
+        join_date: normalizedJoinDate,
+        serviceType: dbProfile.serviceType || dbProfile.service_type || '',
+        notifications: {
+          email: dbProfile.notifications?.email ?? dbProfile.notifications_email ?? true,
+          sms: dbProfile.notifications?.sms ?? dbProfile.notifications_sms ?? false,
+        },
       });
       setProfilePhotoUrl(dbProfile.profile_photo_url || '');
       setPicPreview(dbProfile.profile_photo_url || '');
@@ -322,53 +382,80 @@ export default function Profile() {
       }
     }
     // Only send fields that exist in the DB
+    const safeJoinDate = profile.join_date || user.created_at?.slice(0, 10) || null;
+    const safeAccountNumber = profile.account_number || generateAccountNumber(user.id);
     const updatableProfile = {
       mobile: profile.mobile,
-      dob: profile.dob,
+      dob: profile.dob || null,
       service_type: profile.serviceType || 'Residential',
-      account_number: profile.account_number,
+      account_number: safeAccountNumber,
       connection_status: profile.connection_status || 'Active',
-      join_date: profile.join_date,
+      join_date: safeJoinDate,
       address: profile.address || '',
       notifications_email: profile.notifications?.email ?? true,
       notifications_sms: profile.notifications?.sms ?? false,
       profile_photo_url: photoUrl || '',
     };
     try {
-      // eslint-disable-next-line no-unused-vars
-      const { data: updatedProfile, error } = await supabase
+      const { data: updatedProfiles, error: updateError } = await supabase
         .from('profiles')
         .update(updatableProfile)
         .eq('id', user.id)
-        .select()
-        .single();
-      if (error) {
-        setSaveError(error.message || 'Failed to save profile. Please try again.');
-        console.error('Supabase update error:', error);
-      } else {
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 2000);
-        setEditMode(false);
-        setPendingPhotoFile(null);
-        setProfilePhotoUrl(updatedProfile?.profile_photo_url || photoUrl || '');
-        setPicPreview(updatedProfile?.profile_photo_url || photoUrl || '');
-        // Defensive: If updatedProfile is null, set defaults
-        if (!updatedProfile) {
-          setProfile(p => ({ ...p }));
-        } else {
-          setProfile({
-            email: updatedProfile.email || profile.email || '',
-            mobile: updatedProfile.mobile || '',
-            dob: updatedProfile.dob || '',
-            address: updatedProfile.address || '',
-            account_number: updatedProfile.account_number || '',
-            connection_status: updatedProfile.connection_status || '',
-            join_date: updatedProfile.join_date || '',
-            serviceType: updatedProfile.serviceType || '',
-            notifications: updatedProfile.notifications || { email: true, sms: false },
-          });
-        }
+        .select('*');
+      let updatedProfile = Array.isArray(updatedProfiles) ? updatedProfiles[0] : null;
+
+      if (updateError) {
+        setSaveError(updateError.message || 'Failed to save profile. Please try again.');
+        console.error('Supabase update error:', updateError);
+        setSaving(false);
+        return;
       }
+
+      // If no row was updated, create it and then continue with the created row.
+      if (!updatedProfile) {
+        const { data: insertedProfiles, error: insertError } = await supabase
+          .from('profiles')
+          .upsert({
+            id: user.id,
+            email: user.email || profile.email || '',
+            ...updatableProfile
+          })
+          .select('*');
+
+        if (insertError) {
+          setSaveError(insertError.message || 'Profile row could not be created. Check database policies.');
+          console.error('Supabase upsert error:', insertError);
+          setSaving(false);
+          return;
+        }
+
+        updatedProfile = Array.isArray(insertedProfiles) ? insertedProfiles[0] : null;
+      }
+
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000);
+      setEditMode(false);
+      setPendingPhotoFile(null);
+
+      const persistedPhoto = updatedProfile?.profile_photo_url || photoUrl || '';
+      setProfilePhotoUrl(persistedPhoto);
+      setPicPreview(persistedPhoto);
+
+      // Keep UI in sync even if DB doesn't return all columns.
+      setProfile({
+        email: updatedProfile?.email || profile.email || user.email || '',
+        mobile: updatedProfile?.mobile ?? profile.mobile ?? '',
+        dob: updatedProfile?.dob ?? profile.dob ?? '',
+        address: updatedProfile?.address ?? profile.address ?? '',
+        account_number: updatedProfile?.account_number || safeAccountNumber,
+        connection_status: updatedProfile?.connection_status || profile.connection_status || 'Active',
+        join_date: updatedProfile?.join_date || safeJoinDate,
+        serviceType: updatedProfile?.serviceType || updatedProfile?.service_type || profile.serviceType || 'Residential',
+        notifications: {
+          email: updatedProfile?.notifications?.email ?? updatedProfile?.notifications_email ?? profile.notifications?.email ?? true,
+          sms: updatedProfile?.notifications?.sms ?? updatedProfile?.notifications_sms ?? profile.notifications?.sms ?? false,
+        },
+      });
     } catch (err) {
       setSaveError('Unexpected error during profile save.');
       console.error('Unexpected save error:', err);

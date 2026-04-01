@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Droplets } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { supabase } from './supabaseClient';
-import { RiDropLine, RiBillLine, RiUserLine, RiTestTubeLine } from 'react-icons/ri';
+import { RiDropLine, RiBillLine, RiUserLine } from 'react-icons/ri';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -541,14 +541,6 @@ export default function Dashboard() {
     currentBillAmount
   });
 
-  // Get water level from flow_data table
-  const latestFlowData = cleanedUsageData.length > 0 ? cleanedUsageData[cleanedUsageData.length - 1] : null;
-  // Calculate water level percentage based on liters (assuming max capacity is 1000 liters)
-  const maxCapacity = 1000; // liters
-  const waterLevelPercentage = latestFlowData ? 
-    Math.min(Math.round((latestFlowData.liters || 0) / maxCapacity * 100), 100) : 0;
-  const lastUpdated = latestFlowData ? formatDateDMY(latestFlowData.created_at) : '00';
-
   // Calculate due date (1st of next month) and days remaining
   const dueDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
   const dueDateStr = formatDateDMY(dueDate);
@@ -879,7 +871,7 @@ export default function Dashboard() {
             <h2 className="text-3xl font-semibold text-white drop-shadow">Welcome, {user?.user_metadata?.first_name || '--'}!</h2>
             <p className="text-gray-100 mt-1">Here's an overview of your water consumption and billing information.</p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
@@ -932,33 +924,6 @@ export default function Dashboard() {
               </div>
               <div className="mt-4">
                 <span className="text-gray-500 text-sm">Due on <span className="font-medium text-gray-700">{dueDateStr}</span></span>
-              </div>
-            </motion.div>
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              whileHover={{ scale: 1.03, boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.15)', borderColor: '#3b82f6' }}
-              transition={{ delay: 0.3, duration: 0.5, type: 'spring' }}
-              className="bg-white/40 backdrop-blur-lg p-6 rounded-2xl shadow-lg border border-white/30 hover:border-primary transition-all duration-300 cursor-pointer group"
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-gray-500 text-sm">Water Level</p>
-                  <h3 className="text-4xl font-bold text-gray-800 mt-1">
-                    {loading ? '...' : waterLevelPercentage} <span className="text-lg font-medium">%</span>
-                  </h3>
-                </div>
-                <motion.div
-                  initial={{ scale: 0.8, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ delay: 0.5, duration: 0.5, type: 'spring' }}
-                  className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors duration-300"
-                >
-                  <RiTestTubeLine size={28} />
-                </motion.div>
-              </div>
-              <div className="mt-4">
-                <span className="text-gray-500 text-sm">Last updated: <span className="font-medium text-gray-700">{lastUpdated}</span></span>
               </div>
             </motion.div>
           </div>

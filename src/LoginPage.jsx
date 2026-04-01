@@ -81,6 +81,25 @@ export default function LoginPage() {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [showAdminPrompt, setShowAdminPrompt] = useState(false);
   const [currentAdminUser, setCurrentAdminUser] = useState(null);
+  const [signupCooldownUntil, setSignupCooldownUntil] = useState(0);
+  const [nowMs, setNowMs] = useState(Date.now());
+
+  function getFriendlyAuthErrorMessage(error) {
+    const message = error?.message?.toLowerCase?.() || '';
+    if (message.includes('email rate limit exceeded') || message.includes('over_email_send_rate_limit')) {
+      return 'Too many email requests were sent recently. Please wait 60 seconds and try again.';
+    }
+    if (message.includes('user already registered')) {
+      return 'This email is already registered. Please sign in instead.';
+    }
+    return error?.message || 'Authentication failed. Please try again.';
+  }
+  const signupCooldownSeconds = Math.max(0, Math.ceil((signupCooldownUntil - nowMs) / 1000));
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     // Check if user is already logged in and redirect accordingly
@@ -212,7 +231,7 @@ export default function LoginPage() {
         
         if (error) {
           console.error('Login error:', error);
-          setErrors({ general: error.message });
+          setErrors({ general: getFriendlyAuthErrorMessage(error) });
         } else {
           console.log('Login successful, user:', data.user);
           // Check if user has admin role
@@ -255,6 +274,11 @@ export default function LoginPage() {
           }
         }
       } else {
+        if (signupCooldownSeconds > 0) {
+          setErrors({ general: `Please wait ${signupCooldownSeconds}s before trying to sign up again.` });
+          setIsLoading(false);
+          return;
+        }
         const { data, error } = await supabase.auth.signUp({
           email: formData.email,
           password: formData.password,
@@ -266,18 +290,23 @@ export default function LoginPage() {
           },
         });
         if (error) {
-          setErrors({ general: error.message });
+          const msg = getFriendlyAuthErrorMessage(error);
+          setErrors({ general: msg });
+          if (msg.toLowerCase().includes('please wait 60 seconds')) {
+            setSignupCooldownUntil(Date.now() + 60000);
+          }
         } else {
-          // Create profile row with join_date and account_number
+          // Create profile row (do not block signup if this fails)
           if (data?.user) {
-            await supabase.from('profiles').insert({
+            const { error: profileUpsertError } = await supabase.from('profiles').upsert({
               id: data.user.id,
-              First_name: formData.firstName,
-              Last_name: formData.lastName,
               email: formData.email,
               join_date: new Date().toISOString().slice(0, 10),
               account_number: `AQB-${Math.floor(10000 + Math.random() * 90000)}`
             });
+            if (profileUpsertError) {
+              console.error('Profile upsert failed after signup:', profileUpsertError);
+            }
           }
           setSuccessMessage('Signup successful! Please check your email to confirm your account.');
           setSignupJustCompleted(true);
@@ -289,7 +318,7 @@ export default function LoginPage() {
         }
       }
     } catch (error) {
-      setErrors({ general: error.message || 'Authentication failed. Please try again.' });
+      setErrors({ general: getFriendlyAuthErrorMessage(error) });
     } finally {
       setIsLoading(false);
     }
@@ -308,7 +337,7 @@ export default function LoginPage() {
         redirectTo: `${window.location.origin}/reset-password`
       });
       if (error) {
-        setForgotStatus(error.message);
+        setForgotStatus(getFriendlyAuthErrorMessage(error));
       } else {
         setForgotStatus('Password reset email sent! Please check your inbox.');
       }
@@ -706,7 +735,7 @@ export default function LoginPage() {
               )}
               <button
                 type="submit"
-                disabled={isLoading || (mode === 'signup' && !agreedToTerms)}
+                disabled={isLoading || (mode === 'signup' && (!agreedToTerms || signupCooldownSeconds > 0))}
                 className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
               >
                 {isLoading ? (
@@ -716,7 +745,11 @@ export default function LoginPage() {
                   </div>
                 ) : (
                   <>
-                    {mode === 'login' ? 'Sign In' : 'Create Account'}
+                    {mode === 'login'
+                      ? 'Sign In'
+                      : signupCooldownSeconds > 0
+                      ? `Try again in ${signupCooldownSeconds}s`
+                      : 'Create Account'}
                     <ArrowRight size={20} className="ml-2" />
                   </>
                 )}

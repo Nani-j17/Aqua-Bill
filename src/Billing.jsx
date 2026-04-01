@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import razorpayService from './services/razorpayService';
-import { RiBankCardLine, RiBankLine, RiAddLine, RiDownloadLine, RiSearchLine, RiArrowDownSLine, RiDashboardLine, RiBillLine, RiCustomerServiceLine, RiUserLine, RiLoader4Line } from 'react-icons/ri';
+import { RiBankCardLine, RiBankLine, RiAddLine, RiDownloadLine, RiSearchLine, RiArrowDownSLine, RiDashboardLine, RiBillLine, RiCustomerServiceLine, RiUserLine, RiLoader4Line, RiEyeLine, RiEyeOffLine } from 'react-icons/ri';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { subDays, subMonths, subYears } from 'date-fns';
@@ -13,6 +13,18 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, T
 const gradientColors = [
   '#6366f1', '#22d3ee', '#06b6d4', '#818cf8', '#3b82f6', '#0ea5e9', '#a5b4fc', '#38bdf8', '#67e8f9', '#5eead4', '#f472b6', '#fbbf24',
 ];
+
+const IFSC_BANK_MAP = {
+  SBIN: 'State Bank of India',
+  HDFC: 'HDFC Bank',
+  ICIC: 'ICICI Bank',
+  UTIB: 'Axis Bank',
+  KKBK: 'Kotak Mahindra Bank',
+  PUNB: 'Punjab National Bank',
+  BARB: 'Bank of Baroda',
+  IDIB: 'Indian Bank',
+  CNRB: 'Canara Bank',
+};
 
 function getRandomGradient() {
   let idx1 = Math.floor(Math.random() * gradientColors.length);
@@ -33,6 +45,8 @@ export default function Billing() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showPaymentPopup, setShowPaymentPopup] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('razorpay');
+  const [selectedPaymentCard, setSelectedPaymentCard] = useState(null);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState('');
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [paymentError, setPaymentError] = useState('');
@@ -40,6 +54,9 @@ export default function Billing() {
   const [loading, setLoading] = useState(true);
   const [showAddPaymentModal, setShowAddPaymentModal] = useState(false);
   const [showBankDetailsModal, setShowBankDetailsModal] = useState(false);
+  const [showCardDetailsModal, setShowCardDetailsModal] = useState(false);
+  const [selectedCard, setSelectedCard] = useState(null);
+  const [editingCardId, setEditingCardId] = useState(null);
   const [paymentMethods, setPaymentMethods] = useState([
     {
       id: 'razorpay',
@@ -64,7 +81,31 @@ export default function Billing() {
     expiry: '',
     cvv: ''
   });
+  const [bankDetails, setBankDetails] = useState({
+    accountNumber: '123456789012',
+    accountType: 'Savings',
+    ifscCode: 'SBIN0001234',
+    branch: 'Main Branch',
+  });
+  const [bankForm, setBankForm] = useState(bankDetails);
+  const [editingBankDetails, setEditingBankDetails] = useState(false);
+  const [showAccountNumber, setShowAccountNumber] = useState(false);
+  const [showIfscCode, setShowIfscCode] = useState(false);
   const billsPerPage = 5;
+
+  const getSavedCardsStorageKey = (userId) => `aquabill_saved_cards_${userId}`;
+  const getSavedBankStorageKey = (userId) => `aquabill_saved_bank_${userId}`;
+
+  const getBankNameByIfsc = (ifscCode = '') => {
+    const bankCode = ifscCode.slice(0, 4).toUpperCase();
+    return IFSC_BANK_MAP[bankCode] || (bankCode ? `Registered Bank (${bankCode})` : 'Registered Bank');
+  };
+
+  const maskValue = (value = '', visibleChars = 4) => {
+    if (!value) return '----';
+    if (value.length <= visibleChars) return value;
+    return `****${value.slice(-visibleChars)}`;
+  };
 
   useEffect(() => {
     async function fetchUser() {
@@ -76,6 +117,65 @@ export default function Billing() {
     }
     fetchUser();
   }, []);
+
+  // Load saved cards for the logged-in user from local storage.
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      const raw = localStorage.getItem(getSavedCardsStorageKey(user.id));
+      const savedCards = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(savedCards) && savedCards.length > 0) {
+        setPaymentMethods(prev => {
+          const nonCardMethods = prev.filter(method => method.type !== 'card');
+          return [...nonCardMethods, ...savedCards];
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load saved cards:', error);
+    }
+  }, [user]);
+
+  // Persist only card methods so they survive reload/logout.
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      const cardsOnly = paymentMethods.filter(method => method.type === 'card');
+      localStorage.setItem(getSavedCardsStorageKey(user.id), JSON.stringify(cardsOnly));
+    } catch (error) {
+      console.error('Failed to persist saved cards:', error);
+    }
+  }, [paymentMethods, user]);
+
+  // Load bank details for the logged-in user.
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      const raw = localStorage.getItem(getSavedBankStorageKey(user.id));
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const next = {
+          accountNumber: parsed?.accountNumber || '123456789012',
+          accountType: parsed?.accountType || 'Savings',
+          ifscCode: (parsed?.ifscCode || 'SBIN0001234').toUpperCase(),
+          branch: parsed?.branch || 'Main Branch',
+        };
+        setBankDetails(next);
+        setBankForm(next);
+      }
+    } catch (error) {
+      console.error('Failed to load bank details:', error);
+    }
+  }, [user]);
+
+  // Persist bank details so they survive reload/logout.
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      localStorage.setItem(getSavedBankStorageKey(user.id), JSON.stringify(bankDetails));
+    } catch (error) {
+      console.error('Failed to persist bank details:', error);
+    }
+  }, [bankDetails, user]);
 
   const fetchProfilePhoto = async (userId) => {
     try {
@@ -652,12 +752,60 @@ const exportToPDF = (bills) => {
     if (methodId === 'razorpay') {
       handleRazorpayPayment();
     } else if (methodId === 'bank') {
+      setEditingBankDetails(false);
+      setShowAccountNumber(false);
+      setShowIfscCode(false);
       setShowBankDetailsModal(true);
     } else if (methodId === 'card' && cardData) {
-      handleCardPayment(cardData);
+      setSelectedCard(cardData);
+      setShowCardDetailsModal(true);
     } else {
       setPaymentError('This payment method is not available yet.');
     }
+  };
+
+  const handleProceedPayment = () => {
+    if (selectedPaymentMethod === 'razorpay') {
+      handlePaymentMethodSelect('razorpay');
+      return;
+    }
+    if (selectedPaymentMethod === 'bank') {
+      handlePaymentMethodSelect('razorpay');
+      return;
+    }
+    if (selectedPaymentMethod === 'card') {
+      if (!selectedPaymentCard) {
+        setPaymentError('Please select a card to continue.');
+        return;
+      }
+      handlePaymentMethodSelect('razorpay');
+      return;
+    }
+    setPaymentError('Please select a valid payment method.');
+  };
+
+  const handleDeleteCard = (cardId) => {
+    setPaymentMethods(prev => prev.filter(m => m.id !== cardId));
+    setSelectedCard(null);
+    setShowCardDetailsModal(false);
+  };
+
+  const formatCardNumber = (value = '') => {
+    const digits = value.replace(/\D/g, '').slice(0, 16);
+    return digits.replace(/(\d{4})(?=\d)/g, '$1 ').trim();
+  };
+
+  const normalizeExpiry = (raw = '') => {
+    const digits = raw.replace(/\D/g, '').slice(0, 4);
+    if (digits.length === 0) return '';
+    if (digits.length < 3) return digits; // let user type MM first
+
+    let mm = digits.slice(0, 2);
+    const yy = digits.slice(2, 4);
+    const mmNum = parseInt(mm, 10);
+    const clamped = Number.isNaN(mmNum) ? 1 : Math.min(Math.max(mmNum, 1), 12);
+    mm = String(clamped).padStart(2, '0');
+    return yy ? `${mm}/${yy}` : `${mm}/`;
   };
 
   const handleCardPayment = (cardData) => {
@@ -669,21 +817,61 @@ const exportToPDF = (bills) => {
   };
 
   const handleAddPaymentMethod = () => {
+    setEditingCardId(null);
+    setNewPaymentMethod({ type: 'card', cardNumber: '', cardHolder: '', expiry: '', cvv: '' });
     setShowAddPaymentModal(true);
   };
 
+  const handleSaveBankDetails = () => {
+    const accountDigits = bankForm.accountNumber.replace(/\D/g, '').slice(0, 18);
+    const ifsc = bankForm.ifscCode.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 11);
+    if (accountDigits.length < 8 || ifsc.length !== 11) {
+      setPaymentError('Enter a valid account number and 11-character IFSC code.');
+      return;
+    }
+    const next = {
+      accountNumber: accountDigits,
+      accountType: bankForm.accountType || 'Savings',
+      ifscCode: ifsc,
+      branch: bankForm.branch || 'Main Branch',
+    };
+    setBankDetails(next);
+    setBankForm(next);
+    setEditingBankDetails(false);
+    setPaymentError('');
+  };
+
   const handleSaveNewPaymentMethod = () => {
-    if (newPaymentMethod.cardNumber && newPaymentMethod.cardHolder && newPaymentMethod.expiry && newPaymentMethod.cvv) {
-      const newMethod = {
-        id: `card_${Date.now()}`,
+    const cardDigits = (newPaymentMethod.cardNumber || '').replace(/\D/g, '');
+    const cvvDigits = (newPaymentMethod.cvv || '').replace(/\D/g, '');
+    const isValidCard = cardDigits.length === 16;
+    const isValidCvv = cvvDigits.length === 3;
+
+    if (isValidCard && newPaymentMethod.cardHolder && newPaymentMethod.expiry && isValidCvv) {
+      const baseMethod = {
         name: `${newPaymentMethod.cardHolder}'s Card`,
         type: 'card',
-        cardNumber: `****${newPaymentMethod.cardNumber.slice(-4)}`,
+        cardDigits,
+        cardNumber: `****${cardDigits.slice(-4)}`,
         cardHolder: newPaymentMethod.cardHolder,
-        isDefault: false
+        expiry: newPaymentMethod.expiry,
+        isDefault: false,
       };
-      
-      setPaymentMethods(prev => [...prev, newMethod]);
+
+      if (editingCardId) {
+        setPaymentMethods(prev =>
+          prev.map(m => (m.id === editingCardId ? { ...m, ...baseMethod } : m))
+        );
+        if (selectedCard?.id === editingCardId) {
+          setSelectedCard(prev => (prev ? { ...prev, ...baseMethod, id: editingCardId } : prev));
+        }
+      } else {
+        const newMethod = { id: `card_${Date.now()}`, ...baseMethod };
+        setPaymentMethods(prev => [...prev, newMethod]);
+        setSelectedPaymentMethod('card');
+        setSelectedPaymentCard(newMethod);
+      }
+
       setNewPaymentMethod({
         type: 'card',
         cardNumber: '',
@@ -691,7 +879,9 @@ const exportToPDF = (bills) => {
         expiry: '',
         cvv: ''
       });
+      setEditingCardId(null);
       setShowAddPaymentModal(false);
+      setShowPaymentPopup(true);
     }
   };
 
@@ -822,7 +1012,11 @@ const exportToPDF = (bills) => {
                 </div>
                 <div className="mt-4 md:mt-0">
                   <button
-                    onClick={() => setShowPaymentPopup(true)}
+                    onClick={() => {
+                      setSelectedPaymentMethod('razorpay');
+                      setSelectedPaymentCard(null);
+                      setShowPaymentPopup(true);
+                    }}
                     className="px-5 py-2 rounded-full font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors duration-200 flex items-center gap-2 whitespace-nowrap"
                   >
                     <RiBankCardLine className="mr-2" /> Make Payment
@@ -867,8 +1061,8 @@ const exportToPDF = (bills) => {
                       <RiBankLine size={18} />
                     </div>
                     <div>
-                      <p className="font-semibold text-gray-800 text-sm">Bank Account</p>
-                      <p className="text-xs text-gray-600">****1234</p>
+                      <p className="font-semibold text-gray-800 text-sm">{getBankNameByIfsc(bankDetails.ifscCode)}</p>
+                      <p className="text-xs text-gray-600">{maskValue(bankDetails.accountNumber, 4)}</p>
                     </div>
                   </div>
                   <div className="flex flex-col items-end">
@@ -1174,8 +1368,15 @@ const exportToPDF = (bills) => {
               )}
               
               <div 
-                onClick={() => handlePaymentMethodSelect('razorpay')}
-                className="border-2 border-purple-500 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-4 flex items-center justify-between transition-all duration-300 shadow-lg cursor-pointer hover:shadow-xl hover:scale-105"
+                onClick={() => {
+                  setSelectedPaymentMethod('razorpay');
+                  setSelectedPaymentCard(null);
+                }}
+                className={`border-2 rounded-xl p-4 flex items-center justify-between transition-all duration-300 shadow-lg cursor-pointer hover:shadow-xl hover:scale-105 ${
+                  selectedPaymentMethod === 'razorpay'
+                    ? 'border-purple-600 bg-gradient-to-r from-purple-100 to-pink-100'
+                    : 'border-purple-500 bg-gradient-to-r from-purple-50 to-pink-50'
+                }`}
               >
                 <div className="flex items-center">
                   <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center mr-4 shadow-md">
@@ -1198,19 +1399,61 @@ const exportToPDF = (bills) => {
                 </div>
               </div>
               
-              <div className="border border-gray-200 rounded-xl p-4 flex items-center justify-between transition-all duration-300 cursor-pointer hover:border-blue-300 hover:bg-blue-50">
+              <div
+                onClick={() => {
+                  setSelectedPaymentMethod('bank');
+                  setSelectedPaymentCard(null);
+                }}
+                className={`border rounded-xl p-4 flex items-center justify-between transition-all duration-300 cursor-pointer hover:border-blue-300 hover:bg-blue-50 ${
+                  selectedPaymentMethod === 'bank'
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200'
+                }`}
+              >
                 <div className="flex items-center">
                   <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-primary mr-3">
                     <RiBankLine size={22} />
                   </div>
                   <div>
-                    <p className="font-medium text-gray-800">Bank Account</p>
-                    <p className="text-xs text-gray-500">****----</p>
+                    <p className="font-medium text-gray-800">{getBankNameByIfsc(bankDetails.ifscCode)}</p>
+                    <p className="text-xs text-gray-500">{maskValue(bankDetails.accountNumber, 4)}</p>
                   </div>
                 </div>
               </div>
+
+              {paymentMethods.filter(method => method.type === 'card').map((card) => (
+                <div
+                  key={`popup_${card.id}`}
+                  onClick={() => {
+                    setSelectedPaymentMethod('card');
+                    setSelectedPaymentCard(card);
+                  }}
+                  className={`border rounded-xl p-4 flex items-center justify-between transition-all duration-300 cursor-pointer hover:shadow-md ${
+                    selectedPaymentMethod === 'card' && selectedPaymentCard?.id === card.id
+                      ? 'border-orange-500 bg-orange-50'
+                      : 'border-gray-200 hover:border-orange-300'
+                  }`}
+                >
+                  <div className="flex items-center">
+                    <div className="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center text-orange-600 mr-3">
+                      <RiBankCardLine size={20} />
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-800">{card.name}</p>
+                      <p className="text-xs text-gray-500">{card.cardNumber} • {card.expiry || '--/--'}</p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-medium text-orange-600 bg-orange-100 px-3 py-1 rounded-full">Card</span>
+                </div>
+              ))}
               
-              <button className="w-full mt-4 px-4 py-2 border border-dashed border-gray-300 rounded-xl text-gray-600 hover:text-primary hover:border-primary transition-colors flex items-center justify-center gap-2">
+              <button
+                onClick={() => {
+                  setShowPaymentPopup(false);
+                  handleAddPaymentMethod();
+                }}
+                className="w-full mt-4 px-4 py-2 border border-dashed border-gray-300 rounded-xl text-gray-600 hover:text-primary hover:border-primary transition-colors flex items-center justify-center gap-2"
+              >
                 <RiAddLine /> Add Payment Method
               </button>
             </div>
@@ -1223,7 +1466,7 @@ const exportToPDF = (bills) => {
                 Cancel
               </button>
               <button 
-                onClick={() => handlePaymentMethodSelect('razorpay')}
+                onClick={handleProceedPayment}
                 disabled={paymentProcessing}
                 className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium disabled:bg-blue-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
@@ -1270,48 +1513,130 @@ const exportToPDF = (bills) => {
             </div>
             
             <div className="space-y-4">
-              <div className="bg-blue-50 rounded-lg p-4">
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
                 <div className="flex items-center mb-3">
                   <RiBankLine size={24} className="text-blue-600 mr-3" />
-                  <h4 className="font-semibold text-gray-800">State Bank of India</h4>
+                  <h4 className="font-semibold text-gray-800">{getBankNameByIfsc(bankDetails.ifscCode)}</h4>
                 </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Account Number:</span>
-                    <span className="font-medium">****1234</span>
+
+                {!editingBankDetails ? (
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Account Number:</span>
+                      <span className="font-medium flex items-center gap-2">
+                        {showAccountNumber ? bankDetails.accountNumber : maskValue(bankDetails.accountNumber, 4)}
+                        <button onClick={() => setShowAccountNumber(v => !v)} className="text-gray-500 hover:text-gray-700">
+                          {showAccountNumber ? <RiEyeOffLine size={18} /> : <RiEyeLine size={18} />}
+                        </button>
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Account Type:</span>
+                      <span className="font-medium">{bankDetails.accountType}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">IFSC Code:</span>
+                      <span className="font-medium flex items-center gap-2">
+                        {showIfscCode ? bankDetails.ifscCode : maskValue(bankDetails.ifscCode, 4)}
+                        <button onClick={() => setShowIfscCode(v => !v)} className="text-gray-500 hover:text-gray-700">
+                          {showIfscCode ? <RiEyeOffLine size={18} /> : <RiEyeLine size={18} />}
+                        </button>
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Branch:</span>
+                      <span className="font-medium">{bankDetails.branch}</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Account Type:</span>
-                    <span className="font-medium">Savings</span>
+                ) : (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Account Number</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={bankForm.accountNumber}
+                        onChange={(e) => setBankForm({ ...bankForm, accountNumber: e.target.value.replace(/\D/g, '').slice(0, 18) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                        placeholder="Enter account number"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Account Type</label>
+                      <select
+                        value={bankForm.accountType}
+                        onChange={(e) => setBankForm({ ...bankForm, accountType: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      >
+                        <option value="Savings">Savings</option>
+                        <option value="Current">Current</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">IFSC Code</label>
+                      <input
+                        type="text"
+                        value={bankForm.ifscCode}
+                        onChange={(e) => setBankForm({ ...bankForm, ifscCode: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                        placeholder="e.g. SBIN0001234"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Detected bank: {getBankNameByIfsc(bankForm.ifscCode)}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Branch</label>
+                      <input
+                        type="text"
+                        value={bankForm.branch}
+                        onChange={(e) => setBankForm({ ...bankForm, branch: e.target.value.slice(0, 40) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                        placeholder="Branch name"
+                      />
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">IFSC Code:</span>
-                    <span className="font-medium">SBIN0001234</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Branch:</span>
-                    <span className="font-medium">Main Branch</span>
-                  </div>
-                </div>
+                )}
               </div>
-              
+
               <div className="bg-yellow-50 rounded-lg p-4">
                 <div className="flex items-center">
                   <svg className="w-5 h-5 text-yellow-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                   </svg>
-                  <p className="text-yellow-800 text-sm">This account is linked for automatic bill payments.</p>
+                  <p className="text-yellow-800 text-sm">Your bank details are used for secure billing and auto-payment setup.</p>
                 </div>
               </div>
             </div>
-            
-            <div className="mt-6">
+
+            <div className="mt-6 flex gap-3">
               <button
-                onClick={() => setShowBankDetailsModal(false)}
-                className="w-full px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
+                onClick={() => {
+                  setShowBankDetailsModal(false);
+                  setEditingBankDetails(false);
+                  setShowAccountNumber(false);
+                  setShowIfscCode(false);
+                }}
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium"
               >
                 Close
               </button>
+              {!editingBankDetails ? (
+                <button
+                  onClick={() => {
+                    setBankForm(bankDetails);
+                    setEditingBankDetails(true);
+                  }}
+                  className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
+                >
+                  Edit
+                </button>
+              ) : (
+                <button
+                  onClick={handleSaveBankDetails}
+                  className="flex-1 px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors font-medium"
+                >
+                  Save
+                </button>
+              )}
             </div>
           </motion.div>
         </motion.div>
@@ -1350,11 +1675,16 @@ const exportToPDF = (bills) => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Card Number</label>
                 <input
                   type="text"
-                  placeholder="1234 5678 9012 3456"
-                  value={newPaymentMethod.cardNumber}
-                  onChange={(e) => setNewPaymentMethod({...newPaymentMethod, cardNumber: e.target.value})}
+                  inputMode="numeric"
+                  autoComplete="cc-number"
+                  placeholder="0000 0000 0000 0000"
+                  value={formatCardNumber(newPaymentMethod.cardNumber)}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, '').slice(0, 16);
+                    setNewPaymentMethod({ ...newPaymentMethod, cardNumber: digits });
+                  }}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-                  maxLength="19"
+                  maxLength={19}
                 />
               </div>
               
@@ -1377,15 +1707,8 @@ const exportToPDF = (bills) => {
                     placeholder="MM/YY"
                     value={newPaymentMethod.expiry}
                     onChange={(e) => {
-                      let value = e.target.value.replace(/\D/g, '');
-                      
-                      if (value.length >= 2) {
-                        value = value.slice(0, 2) + '/' + value.slice(2);
-                      }
-                      
-                      if (value.length <= 5) {
-                        setNewPaymentMethod({...newPaymentMethod, expiry: value});
-                      }
+                      const next = normalizeExpiry(e.target.value);
+                      if (next.length <= 5) setNewPaymentMethod({ ...newPaymentMethod, expiry: next });
                     }}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
                     maxLength="5"
@@ -1394,12 +1717,17 @@ const exportToPDF = (bills) => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">CVV</label>
                   <input
-                    type="text"
-                    placeholder="123"
+                    type="password"
+                    inputMode="numeric"
+                    autoComplete="cc-csc"
+                    placeholder="***"
                     value={newPaymentMethod.cvv}
-                    onChange={(e) => setNewPaymentMethod({...newPaymentMethod, cvv: e.target.value})}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, 3);
+                      setNewPaymentMethod({ ...newPaymentMethod, cvv: digits });
+                    }}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    maxLength="4"
+                    maxLength={3}
                   />
                 </div>
               </div>
@@ -1417,6 +1745,107 @@ const exportToPDF = (bills) => {
                 className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
               >
                 Add Card
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+
+      {/* Card Details Modal */}
+      {showCardDetailsModal && selectedCard && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => {
+            setShowCardDetailsModal(false);
+            setSelectedCard(null);
+          }}
+        >
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.8, opacity: 0 }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-gray-800">Card Details</h3>
+              <button
+                onClick={() => {
+                  setShowCardDetailsModal(false);
+                  setSelectedCard(null);
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm text-gray-600">Name</div>
+                    <div className="font-semibold text-gray-900">{selectedCard.name}</div>
+                  </div>
+                  <span className="text-xs font-semibold text-orange-700 bg-orange-100 px-2 py-1 rounded-full">Card</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                  <div className="text-sm text-gray-600">Card Number</div>
+                  <div className="font-mono font-semibold text-gray-900 mt-1">{selectedCard.cardNumber}</div>
+                </div>
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                  <div className="text-sm text-gray-600">Expiry</div>
+                  <div className="font-semibold text-gray-900 mt-1">{selectedCard.expiry || '--/--'}</div>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                <div className="text-sm text-gray-600">Card Holder</div>
+                <div className="font-semibold text-gray-900 mt-1">{selectedCard.cardHolder || '--'}</div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => {
+                  setShowCardDetailsModal(false);
+                  setSelectedCard(null);
+                }}
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  setEditingCardId(selectedCard.id);
+                  setNewPaymentMethod({
+                    type: 'card',
+                    cardNumber: selectedCard.cardDigits || '',
+                    cardHolder: selectedCard.cardHolder || '',
+                    expiry: selectedCard.expiry || '',
+                    cvv: ''
+                  });
+                  setShowCardDetailsModal(false);
+                  setShowAddPaymentModal(true);
+                }}
+                className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => handleDeleteCard(selectedCard.id)}
+                className="flex-1 px-4 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors font-medium"
+              >
+                Delete
               </button>
             </div>
           </motion.div>
